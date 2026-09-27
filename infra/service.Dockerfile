@@ -1,6 +1,6 @@
-# service 镜像：python:3.12-slim + uv。
+# service 镜像：uv 官方组合镜像（Python 3.12 + uv，Debian slim，glibc 与 python:3.12-slim 同源）。
 # 单 worker：agent 任务重、并发低；要横向扩展时再拆调度（architecture.md §6）。
-FROM docker.1ms.run/library/python:3.12.13-slim AS base
+FROM docker.1ms.run/astral/uv:python3.12-bookworm-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -8,9 +8,6 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     # 国内构建走清华 PyPI 镜像
     UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
-
-# uv 从官方镜像拷进来，避免在构建期 pip install uv。
-COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
