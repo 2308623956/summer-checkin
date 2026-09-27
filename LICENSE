@@ -1,6 +1,7 @@
 MIT License
 
 Copyright (c) 2026 2308623956
+Copyright (c) 2026 ruan-weibo (original project: https://github.com/gdut4140/summer-checkin)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,9 +20,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-本仓库的部分设计与数据模型源自第三方 MIT 项目，其原始版权声明见
-[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。该声明同样受 MIT 保护，
-须随本软件一并保留。
