@@ -12,18 +12,19 @@ upstream summer_service {
     keepalive 16;
 }
 
+# 透传请求 id：没有就生成一个，响应与日志都带着它（architecture.md §7.4）。
+# map 只能出现在 http 层级，所以要放在 server 块外面（conf.d 的文件本身就在 http 里）。
+map $http_x_request_id $summer_request_id {
+    default   $http_x_request_id;
+    ""        $request_id;
+}
+
 server {
     listen ${HTTP_PORT};
     server_name _;
 
     # 上传打卡截图会用到，默认 1m 太小。
     client_max_body_size 12m;
-
-    # 透传请求 id：没有就生成一个，响应与日志都带着它（architecture.md §7.4）。
-    map $http_x_request_id $summer_request_id {
-        default   $http_x_request_id;
-        ""        $request_id;
-    }
 
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
