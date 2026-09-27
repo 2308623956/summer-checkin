@@ -6,7 +6,7 @@
 
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: docker.1ms.run/pgvector/pgvector:pg16
     restart: unless-stopped
     # 某些 VM 内核下 Docker 默认 seccomp 会拦住 postgres initdb 的 fork（报 Cannot allocate memory）。
     security_opt:
@@ -19,6 +19,9 @@ services:
       - db_data:/var/lib/postgresql/data
       # 只有数据卷为空时执行一次：启用 pgvector。
       - ./db/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    ports:
+      # 只绑宿主机回环地址：公网连不上，仅供 SSH 隧道访问。
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-summer} -d ${POSTGRES_DB:-summer_checkin}"]
       interval: 10s

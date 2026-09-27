@@ -1,10 +1,11 @@
 # web 镜像：多阶段构建，运行时用 standalone 产物。
-FROM node:22-alpine AS deps
+FROM docker.1ms.run/library/node:22-alpine AS deps
 WORKDIR /app
 COPY web/package.json web/package-lock.json ./
-RUN npm ci
+# 国内构建走 npmmirror；npm 会把 lockfile 里 npmjs.org 的地址重写到该 registry
+RUN npm ci --registry=https://registry.npmmirror.com
 
-FROM node:22-alpine AS builder
+FROM docker.1ms.run/library/node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY web/ ./
@@ -12,7 +13,7 @@ COPY web/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM docker.1ms.run/library/node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
