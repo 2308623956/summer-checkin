@@ -7,7 +7,9 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     # 国内构建走清华 PyPI 镜像
-    UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+    UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ \
+    # 镜像限速时 30s 默认超时太短，大轮子（asyncpg/cryptography）容易下到一半被掐
+    UV_HTTP_TIMEOUT=120
 
 WORKDIR /app
 
