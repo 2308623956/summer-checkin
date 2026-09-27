@@ -1,122 +1,128 @@
-# Thinking Guides for Next.js Full-Stack Projects
+# 思考指南（Thinking Guides）
 
-> **Purpose**: Systematic thinking guides to catch issues before they become bugs.
+> **用途**：系统化的思考清单，在问题变成 bug 之前抓住它。
 >
-> **Core Philosophy**: 30 minutes of thinking saves 3 hours of debugging.
+> **核心理念**：30 分钟的思考省下 3 小时的调试。
 
 ---
 
-## Why Thinking Guides?
+## 为什么需要思考指南
 
-**Most bugs and tech debt come from "didn't think of that"**, not from lack of skill:
+**大多数 bug 与技术债来自"没想到"，而不是能力不足**：
 
-- Didn't think about what happens at layer boundaries -> cross-layer bugs
-- Didn't think about code patterns repeating -> duplicated code everywhere
-- Didn't think about edge cases -> runtime errors
-- Didn't think about future maintainers -> unreadable code
+- 没想到层边界上会发生什么 → 跨层 bug
+- 没想到同样的代码模式在重复 → 到处都是重复代码
+- 没想到边缘情况 → 运行时错误
+- 没想到后来接手的人 → 读不懂的代码
 
-These guides help you **ask the right questions before coding**.
-
----
-
-## Available Thinking Guides
-
-| Guide                                                             | Purpose                                       | When to Use                                      |
-| ----------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------ |
-| [Cross-Layer Thinking](./cross-layer-thinking-guide.md)           | Think through data flow across layers         | Before implementing features that span 3+ layers |
-| [Pre-Implementation Checklist](./pre-implementation-checklist.md) | Verify readiness before coding                | Before starting any feature implementation       |
+这些指南帮你在**动手之前问对问题**。
 
 ---
 
-## Quick Reference: When to Use Which Guide
+## 可用的思考指南
 
-### Cross-Layer Issues
-
-Use [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) when:
-
-- [ ] Feature touches 3+ layers (Server Component, Client Component, oRPC, Database)
-- [ ] Data format changes between layers
-- [ ] Multiple consumers need the same data
-- [ ] You're not sure where to put some logic
-- [ ] Integrates with external services or third-party APIs
-
-### Before Writing Code
-
-Use [Pre-Implementation Checklist](./pre-implementation-checklist.md) when:
-
-- [ ] About to add a constant or config value
-- [ ] About to implement new logic
-- [ ] About to define a type or Zod schema
-- [ ] About to create a component or hook
-- [ ] About to add an oRPC procedure
-- [ ] Feels like you've seen similar code before
+| 指南 | 用途 | 什么时候用 |
+|---|---|---|
+| [跨层思考指南](./cross-layer-thinking-guide.md) | 想清楚数据如何流过多层 | 改动跨 3 层以上时 |
+| [动手前检查清单](./pre-implementation-checklist.md) | 确认可以开工了 | 开始写任何功能之前 |
 
 ---
 
-## The Pre-Modification Rule (CRITICAL)
+## 快速索引：什么时候用哪个
 
-> **Before changing ANY value, ALWAYS search first!**
+### 跨层问题
+
+以下情况用 [跨层思考指南](./cross-layer-thinking-guide.md)：
+
+- [ ] 改动跨 3 层以上（页面 → `api.ts` → nginx → service → DB）
+- [ ] 数据格式在层之间变化
+- [ ] 多个消费方需要同一份数据
+- [ ] 不确定某段逻辑该放哪一层
+- [ ] 要接外部服务或第三方 API
+
+### 写代码之前
+
+以下情况用 [动手前检查清单](./pre-implementation-checklist.md)：
+
+- [ ] 要新增一个常量或配置值
+- [ ] 要实现新逻辑
+- [ ] 要定义一个类型或 schema
+- [ ] 要新建组件或 hook
+- [ ] 要新增或修改一个接口
+- [ ] 感觉"这段代码好像见过"
+
+---
+
+## 改动前先搜索（重要）
+
+> **改动任何值之前，先搜索！**
 
 ```bash
-# Search for the value you're about to change
-rg "value_to_change" --type ts
+# 搜索你即将改动的值
+grep -rn "value_to_change" src/
 
-# Check how many files define this value
-rg "CONFIG_NAME" --type ts -c
+# 看有多少文件定义了这个值
+grep -rn "CONFIG_NAME" src/ -c
 ```
 
-This single habit prevents most "forgot to update X" bugs.
+这一个习惯能挡掉大部分"忘了改另一处"的 bug。
+
+**注意**：本机没有安装 `rg`（实测确认），统一用 `grep`；PowerShell 里也可以用
+`Select-String`。指南里出现的 `rg` 一律换成 `grep`。
 
 ---
 
-## Next.js-Specific Layers
+## 本项目的分层
 
-In Next.js full-stack projects with oRPC and Drizzle, these are the typical layers:
+数据只有一条通路，从页面到数据库要穿过两个进程和一个反向代理：
 
 ```
-Server Components (RSC - data fetching, static rendering)
-        |
-        v
-Client Components ('use client' - interactivity, React Query)
-        |
-        v
-API Routes / oRPC Router (type-safe RPC, middleware, validation)
-        |
-        v
-Service / Business Logic (shared utilities, domain rules)
-        |
-        v
-Database Layer (Drizzle ORM, PostgreSQL, migrations)
+web（Next.js：页面 + 认证）
+      │  只经 /api/v1/*（src/lib/api.ts 是唯一取数出口）
+      │  web 不直连任何业务表
+      ▼
+nginx（路径分流）
+      │  / 与 /api/auth/*  → web
+      │  /api/v1/*         → service
+      ▼
+service（FastAPI：业务逻辑与数据的所有者）
+      │  路由层（薄）→ 服务层（业务）→ 模型层
+      ▼
+PostgreSQL 16 + pgvector（schema 由 Alembic 唯一拥有）
 ```
 
-Each boundary is a potential source of bugs due to:
+每个边界都是 bug 的来源，原因不同：
 
-- **Serialization** - Only serializable data crosses the RSC/Client boundary (no functions, no Date objects, no Maps)
-- **Type mismatches** - Zod schemas on oRPC may not match what the frontend expects
-- **Auth context** - Session availability differs between Server Components, API routes, and middleware
-- **Rendering mode** - Server Components vs Client Components have different capabilities and constraints
-- **Async timing** - React Query caching, stale data, and race conditions
+- **序列化**：跨进程只有 JSON；时间统一存 UTC、传 ISO 字符串
+- **契约错位**：service 的 Pydantic schema 与 web 的期望可能不一致（`docs/tech/api/` 是契约定义处）
+- **认证上下文**：better-auth 在 web 侧签发 15 分钟 JWT，service 只验签、**不碰认证表**
+- **错误语义**：service 返回 `code`，中文文案由 web 映射（`src/lib/error-messages.ts`）
+- **代理行为**：nginx 是真实部署形态的一部分，本地直连端口通过不代表线上通
 
----
-
-## Core Principles
-
-1. **Search Before Write** - Always search for existing patterns before creating new ones
-2. **Think Before Code** - 5 minutes of checklist saves 50 minutes of debugging
-3. **Document Assumptions** - Make implicit assumptions explicit
-4. **Verify All Layers** - Changes often need updates in multiple places
-5. **Learn From Bugs** - Add lessons to these guides after fixing non-trivial bugs
+**契约的唯一事实来源是 `docs/tech/`**（数据模型、接口、架构、集成）。
+本目录只讲"怎么想、怎么查"，具体契约一律查 `docs/tech/`，不要在这里复制。
 
 ---
 
-## Contributing
+## 核心原则
 
-Found a new "didn't think of that" moment? Add it:
-
-1. If it's a **general thinking pattern** -> Add to existing guide or create new one
-2. If it caused a bug -> Add to "Lessons Learned" section in the relevant guide
-3. If it's **project-specific** -> Create a separate project-specific guide
+1. **先搜索再动手** —— 新增之前先找有没有现成的
+2. **先想再写** —— 5 分钟清单省 50 分钟调试
+3. **写下假设** —— 把隐含假设变成明面上的文字
+4. **检查每一层** —— 一个改动往往牵动多处
+5. **从 bug 中学习** —— 修完非平凡 bug 后，把教训写进这里
 
 ---
 
-**Language**: All documentation should be written in **English**.
+## 贡献
+
+遇到新的"没想到"？按这个顺序放：
+
+1. 如果是**通用思考模式** → 加进现有指南
+2. 如果它导致了 bug → 加进相关指南的"经验教训"一节
+3. 如果是**本项目特有的坑** → 等 R000 之后建立 `spec/web/`、`spec/service/` 时按层归位
+   （当前 service 侧已核实的坑记录在 `docs/tech/backend.md` §3.4 与 `docs/tech/integrations.md` §3）
+
+---
+
+**语言**：本目录文档用中文书写，与 `docs/` 保持一致。

@@ -1,289 +1,241 @@
-# Pre-Implementation Checklist
+# 动手前检查清单
 
-> **Purpose**: Ask the right questions **before** writing code to avoid common architectural mistakes.
-
----
-
-## Why This Checklist?
-
-Most code quality issues aren't caught during implementation--they're **designed in** from the start:
-
-| Problem                                | Root Cause                                    | Cost                       |
-| -------------------------------------- | --------------------------------------------- | -------------------------- |
-| Constants duplicated across 5 files    | Didn't ask "will this be used elsewhere?"     | Refactoring + testing      |
-| Same logic repeated in multiple hooks  | Didn't ask "does this pattern exist?"         | Creating abstraction later |
-| Cross-layer type mismatches            | Didn't ask "who else consumes this?"          | Debugging + fixing         |
-| Zod schema redefined in frontend       | Didn't ask "is this type already exported?"   | Inconsistent validation    |
-| oRPC procedure duplicates existing one | Didn't ask "does a similar endpoint exist?"   | API surface bloat          |
-
-**This checklist catches these issues before they become code.**
+> **用途**：写代码之前花 5 分钟过一遍，省下 50 分钟调试。
+>
+> 这份清单针对本项目的真实链路：`web(Next.js) → nginx → service(FastAPI) → PostgreSQL`。
 
 ---
 
-## The Checklist
+## 为什么需要这份清单
 
-### 1. Constants & Configuration
+不是能力问题，是**没想到**：
 
-Before adding any constant or config value:
+- 没想到同一个常量在别处已经定义过 → 两份定义漂移
+- 没想到这个接口其实已经有了 → 接口膨胀
+- 没想到改的是跨层契约 → 前端悄悄崩掉
+- 没想到要写空态和失败态 → 线上白屏
 
-- [ ] **Cross-package usage?** Will this value be used in both frontend app and API package?
-  - If yes -> Put in a shared package (e.g., `@your-app/utils` or `@your-app/config`)
-  - Example: `MAX_UPLOAD_SIZE` used by both file upload UI and oRPC validation
+---
 
-- [ ] **Multiple consumers?** Will this value be used in 2+ files within the same package?
-  - If yes -> Put in a shared constants file for that package
-  - Example: Don't define `DEBOUNCE_MS = 300` in each hook file
+## 检查清单
 
-- [ ] **Magic number?** Is this a hardcoded value that could change?
-  - If yes -> Extract to named constant with comment explaining why
-  - Example: `PAGINATION_LIMIT: 50  // oRPC default page size`
+### 1. 常量与配置
 
-- [ ] **Environment-dependent?** Does this differ between dev/staging/production?
-  - If yes -> Use environment variables with proper validation
-  - Example: API URLs, feature flags, third-party API keys
-
-### 2. Logic & Patterns
-
-Before implementing any logic:
-
-- [ ] **Pattern exists?** Search for similar patterns in the codebase first
-
+- [ ] **先搜索再新增**：这个常量/配置是不是已经存在？
   ```bash
-  # Example: Before implementing debounced search
-  rg "debounce" src/ packages/
-  rg "useDebounce" src/ packages/
+  grep -rn "MAX_UPLOAD_SIZE" web/src/ service/app/
   ```
+- [ ] **放在正确的层**：前端展示用的放 `web/src/lib/ui/`；业务阈值放 service；
+      跨需求的阈值（如检索阈值、去重阈值）只在 `docs/tech/integrations.md` §3.3 定义一处
+- [ ] **环境变量前缀对**：service 用 `SUMMER_`，web 沿用 `BETTER_AUTH_*` / `DATABASE_URL` / `OSS_*`
+      （见 `docs/tech/integrations.md` §5）
+- [ ] **密钥不进代码、不进日志**
 
-- [ ] **Will repeat?** Will this exact logic be needed in 2+ places?
-  - If yes -> Create a shared hook/utility **first**, then use it
-  - Example: `useDebounce` instead of repeating debounce logic in 5 hooks
+### 2. 逻辑与模式
 
-- [ ] **React Query pattern?** Is there an existing query/mutation hook for this data?
-  - Search before creating: `rg "orpc.items" src/`
-  - Check if you can extend an existing hook rather than creating a new one
+- [ ] **这段逻辑该住哪一层？** 业务规则住 service 服务层，不在路由层、不在组件里
+- [ ] **有没有现成的？** 先看 `service/app/services/` 的既有函数
+- [ ] **是不是重复了？** 见过类似的代码就抽出来
+- [ ] **事务边界对吗？** 写多张表必须在一个事务里
+- [ ] **幂等想了吗？** 见 `docs/tech/architecture.md` §7.2
+- [ ] **并发想了吗？** 两个标签页同时点批准会怎样？（审批靠状态机条件更新）
 
-- [ ] **Server or client?** Does this logic need interactivity?
-  - If no -> Keep it in a Server Component (default)
-  - If yes -> Extract only the interactive part into a Client Component
+### 3. 类型与 Schema
 
-### 3. Types & Schemas
+- [ ] **出入参都有 schema**：service 侧 Pydantic，web 侧表单校验用 zod ^4.4 + react-hook-form
+- [ ] **接口契约先改文档**：改任何接口前，先改 `docs/tech/api/`，再改两端
+- [ ] **没有 `any`**：web 侧不写 `any`，service 侧不写裸 `dict`
+- [ ] **错误码用约定的枚举**：`AUTH_REQUIRED` / `FORBIDDEN` / `NOT_FOUND` /
+      `VALIDATION_FAILED` / `CONFLICT` / `RATE_LIMITED` / `QUOTA_EXCEEDED` /
+      `UPSTREAM_FAILED` / `INTERNAL`（`docs/tech/architecture.md` §7.1）
+- [ ] **不要重复定义后端类型**：接口返回的类型从契约来，不要在前端手抄一份
 
-Before defining types:
+### 4. UI 组件
 
-- [ ] **Zod schema exists?** Is there already a Zod schema for this data shape?
-  - Check the API module's `types.ts`: `rg "Schema = z.object" packages/api/`
-  - Derive TypeScript types from Zod schemas with `z.infer<typeof schema>`
-  - Never manually define a TypeScript interface that duplicates a Zod schema
+- [ ] **服务端 / 客户端边界对吗？** 需要交互与状态才加 `'use client'`
+- [ ] **能复用已有的吗？** 见 `docs/tech/frontend.md` §4 的组件复用清单
+- [ ] **五种状态都有了吗？** 初始 / 触发 / 成功 / 失败 / 空
+      （每个页面的五态在 `docs/tech/frontend.md` §3 逐页写明）
+- [ ] **空态不是白屏**：空数据要有引导文案，**不画空坐标轴**
+- [ ] **文案规范**：不用惩罚式语气，失败要有可行动的下一步（`docs/tech/frontend.md` §9）
+- [ ] **UI 库用 `@base-ui/react`**（**不要引入 Radix UI** —— 本项目不用，实测参考项目 0 处引用）
 
-- [ ] **Existing type?** Does a similar type already exist?
-  - Search before creating: `rg "interface.*YourTypeName\|type.*YourTypeName" src/ packages/`
+### 5. 接口
 
-- [ ] **Cross-layer type?** Is this type used across the oRPC boundary?
-  - If yes -> Define the Zod schema in the API module's `types.ts`, export the inferred type
-  - Frontend should import types from the API package, not redefine them
+- [ ] **先查有没有现成的**：`docs/tech/api/` 有 39 个端点的清单
+- [ ] **新增接口走 5 步**：见 `docs/tech/api/README.md` §9
+- [ ] **路径前缀 `/api/v1/`**：否则 nginx 会把它交给 web，线上 404
+- [ ] **web 侧只经 `src/lib/api.ts`**：不允许组件里直接 `fetch("/api/v1/...")`，
+      更不允许直连数据库
+- [ ] **鉴权方式对**：三种调用方（浏览器 cookie JWT / CLI Bearer / cron secret）
+- [ ] **分页用游标**：`nextCursor`，默认 20、最大 100
+- [ ] **不在 `web/src/app/api/` 加业务接口**：那里只留 better-auth 与 `service-token`
 
-- [ ] **Derived from client?** Can you infer the type from the oRPC client?
-  ```typescript
-  // Prefer this over manually defining types
-  type ItemResult = Awaited<ReturnType<(typeof orpcClient)["items"]["get"]>>;
-  ```
+### 6. 依赖
 
-### 4. UI Components
-
-Before creating UI components:
-
-- [ ] **Server or Client Component?** Does this component need:
-  - Event handlers (onClick, onChange)? -> `'use client'`
-  - React hooks (useState, useEffect)? -> `'use client'`
-  - Browser APIs (window, document)? -> `'use client'`
-  - None of the above? -> Keep as Server Component (default)
-
-- [ ] **Similar component exists?** Search before creating
-  - `rg "function.*YourComponent\|export.*YourComponent" src/`
-
-- [ ] **Visual-logic consistency?** If there's already a visual distinction (icon, color, label) for a concept, does your logic match?
-
-- [ ] **State lifecycle?** Will this component unmount during normal user flow?
-  - If yes -> Consider where state should persist (URL params with nuqs, parent, context)
-
-### 5. API Routes & oRPC Procedures
-
-Before writing an API route or oRPC procedure:
-
-- [ ] **Existing procedure?** Does a similar oRPC procedure already exist?
-  - Check the module's `router.ts`: `rg "Router = {" packages/api/`
-  - Can you extend an existing procedure rather than creating a new one?
-
-- [ ] **Correct HTTP method?**
-  - GET for read operations (queries)
-  - POST for create operations (mutations)
-  - PUT/PATCH for update operations
-  - DELETE for removal operations
-
-- [ ] **Authentication level?** Which base procedure to use?
-  - Public data -> `publicProcedure`
-  - User-specific data -> `protectedProcedure`
-  - Admin operations -> `adminProcedure`
-
-- [ ] **Input/output schemas defined?** Both should be Zod schemas in `types.ts`
-
-### 6. Dependencies
-
-Before adding a dependency:
-
-- [ ] **Already installed?** Check `package.json` across all packages
-  ```bash
-  rg "\"dependency-name\"" package.json packages/*/package.json
-  ```
-
-- [ ] **Built-in alternative?** Can you use a native API or existing utility instead?
-  - Example: `structuredClone()` instead of `lodash.cloneDeep`
-
-- [ ] **Bundle impact?** Will this significantly increase the client bundle?
-  - If yes -> Consider dynamic import or server-only usage
+- [ ] **真的需要新依赖吗？** 能不能用已有的
+- [ ] **不要引入这些**（Trellis 模板里出现过但本项目不用，实测 0 处引用）：
+  - **oRPC** —— 从未使用；web 用 `fetch` 调 REST
+  - **Drizzle / Prisma** —— Prisma 已退场，schema 归 Alembic；Drizzle 从未使用
+  - **React Query / `@tanstack/react-query`** —— 用自写的 `useApi`
+  - **Radix UI** —— 用 `@base-ui/react`
+  - **Turborepo / pnpm workspaces** —— 单仓两目录，不用 workspace 工具
+  - **Vercel AI SDK** —— service 是 Python，LLM 调用在 Python 侧
+- [ ] **版本对齐 `docs/tech/architecture.md` §1**：Next 16.2.10 / React 19.2.4 /
+      Tailwind v4 / Better Auth 1.6.23 / Python 3.12 / SQLAlchemy 2.0
 
 ---
 
-## Quick Decision Tree
+## 快速决策树
 
 ```
-Adding a value/constant?
-|-- Used in both app AND api package? -> shared package (@your-app/utils)
-|-- Used in 2+ files within same package? -> shared constants file
-+-- Single file only? -> Local constant is fine
-
-Adding logic/behavior?
-|-- Similar pattern exists? -> Extend or reuse existing
-|-- Will be used in 2+ places? -> Create shared hook/utility first
-+-- Single use only? -> Implement directly (but document pattern)
-
-Adding a type?
-|-- Zod schema exists? -> Use z.infer<typeof schema>
-|-- Crosses oRPC boundary? -> Define in API types.ts, import elsewhere
-|-- Can derive from client? -> Use Awaited<ReturnType<...>>
-+-- Local only? -> Define locally
-
-Adding a component?
-|-- Needs interactivity? -> 'use client'
-|-- Pure display? -> Server Component (default)
-+-- Mix of both? -> Split into Server wrapper + Client interactive part
+要改动什么？
+│
+├── 一个常量 / 配置值
+│   └─ 先 grep 全仓 → 存在就复用 → 不存在再按层放
+│
+├── 新逻辑
+│   ├─ 是业务规则？ → service/app/services/（不在路由层、不在组件里）
+│   └─ 是展示逻辑？ → web/src/lib/ui/
+│
+├── 一个类型 / schema
+│   ├─ 跨进程契约？ → 先改 docs/tech/api/，service 侧 Pydantic，web 侧从契约来
+│   └─ 仅前端内部？ → web/src/lib/ 或组件旁
+│
+├── 一个组件 / hook
+│   ├─ 需要交互？ → 'use client' + useApi
+│   └─ 纯展示？ → 服务端组件
+│
+└── 一个接口
+    ├─ 已有类似的？ → 复用（先查 docs/tech/api/）
+    └─ 确实要新增 → 走 docs/tech/api/README.md §9 的 5 步
 ```
 
 ---
 
-## What to Verify Across Layers
+## 要跨层验证什么
 
-When implementing a feature that spans Server Component -> API -> Database, verify:
-
-| Layer            | Check                                                              |
-| ---------------- | ------------------------------------------------------------------ |
-| Server Component | Data fetched correctly? Props serializable? No client-only APIs?   |
-| Client Component | Loading/error states handled? React Query cache invalidated?       |
-| oRPC Procedure   | Input validated? Auth checked? Output schema matches?              |
-| Database Query   | No N+1 queries? Proper indexes? Transactions where needed?         |
-| Zod Schemas      | Input and output schemas consistent? Date/null handling correct?   |
+| 层边界 | 验证什么 |
+|---|---|
+| 页面 / `api.ts` | 五种状态齐全；错误码都有对应文案 |
+| `api.ts` / nginx | 路径前缀 `/api/v1/`；凭据带上；本地与线上的差别 |
+| nginx / service | 调用方类型；超时与限额；`X-Request-Id` 透传 |
+| service 路由 / 服务层 | 路由保持薄；事务边界；幂等 |
+| 服务层 / DB | UTC；`user_id` 过滤；schema 只走 Alembic |
+| web / better-auth | 只在 web 侧；service 只验签、不碰认证表 |
 
 ---
 
-## Anti-Patterns to Avoid
+## 反模式
 
-### Redefining Backend Types
+### 在组件里直接 fetch
 
 ```typescript
-// DON'T: Manually define types that mirror Zod schemas
-interface Item {
-  id: string;
-  name: string;
-  createdAt: Date;
-}
+// 错：绕过了统一取数出口，错误处理与凭据传递都要重写一遍
+const res = await fetch("/api/v1/checkins");
 
-// DO: Import or infer from the source of truth
-import type { Item } from "@your-app/api/modules/items/types";
-// or
-type Item = Awaited<ReturnType<(typeof orpcClient)["items"]["get"]>>["item"];
+// 对：走 apiFetch，信封与 ApiError 统一处理
+const data = await apiFetch<Checkin>("/checkins");
 ```
 
-### Manual Query Keys
+### 在前端重复定义后端类型
 
 ```typescript
-// DON'T: Manually construct query keys
-queryClient.invalidateQueries({ queryKey: ["items", "list"] });
+// 错：手抄一份，契约一变就漂移
+type Checkin = { id: string; date: string; hours: number; /* 抄漏了字段 */ };
 
-// DO: Use oRPC generated keys
-queryClient.invalidateQueries({ queryKey: orpc.items.list.key() });
+// 对：契约以 docs/tech/api/ 为准，类型跟着接口定义走
 ```
 
-### Unnecessary Client Components
+### 把业务逻辑写进路由层
 
-```typescript
-// DON'T: Mark everything as 'use client'
-'use client';
-export function ItemCard({ item }) {
-  return <div>{item.name}</div>; // No interactivity needed!
-}
+```python
+# 错：路由层直接写业务与事务
+@router.post("/checkins")
+async def create_checkin(body: CheckinIn, db: AsyncSession = Depends(get_db)):
+    ...  # 校验、业务规则、写多张表全塞这里
 
-// DO: Keep as Server Component when possible
-export function ItemCard({ item }) {
-  return <div>{item.name}</div>;
-}
+# 对：路由薄，业务在服务层
+@router.post("/checkins")
+async def create_checkin(body: CheckinIn, user=Depends(current_user), db=...):
+    return await checkin_service.create(db, user.id, body)
 ```
 
-### Fetch in Client Components When Server Would Work
+### 不必要地使用客户端组件
 
-```typescript
-// DON'T: Fetch in Client Component when data could come from Server Component
-'use client';
-export function ItemList() {
-  const { data } = useQuery(orpc.items.list.queryOptions({ input: {} }));
-  return <ul>{data?.items.map(...)}</ul>;
-}
+纯展示的组件不需要 `'use client'`；加上去会白送一份 JS 到浏览器。
 
-// DO: Fetch in Server Component, pass as props (when no interactivity needed)
-export async function ItemList() {
-  const data = await orpcClient.items.list({});
-  return <ul>{data.items.map(...)}</ul>;
-}
+### 只在本地直连端口验证
+
+本地开发用 rewrite 直连 service，线上走 nginx。**本地通不代表线上通** ——
+路径分流、超时、`X-Request-Id` 透传都只有过 nginx 才验证到。
+
+### 手改数据库
+
+schema 由 Alembic 唯一拥有。手改表会让模型与迁移漂移，`alembic check` 会报错。
+改结构 = 写迁移 + 改模型 + 两者一致。
+
+---
+
+## 什么时候用这份清单
+
+| 情况 | 用哪份 |
+|---|---|
+| 就要动手写一个功能 | 这份 |
+| 改动跨 3 层以上 | 先看[跨层思考指南](./cross-layer-thinking-guide.md) |
+| 改动超过一个文件 | 在任务的 `design.md` 里写下变更边界（见下） |
+| 只是改个文案 | 不用，直接改 |
+
+### 非平凡改动要先写下变更边界
+
+Trellis 的 `trellis-before-dev` 要求：改动超过一个文件、跨层、改公开接口、或改别人写的代码时，
+先写清楚：
+
+- 现在是什么行为、应该变成什么行为（**最小行为差异**）
+- 这个行为**实际住在哪一层**（不是"哪里最容易改"）
+- 预计改哪些文件，每个为什么必要
+- **明确不做什么**
+- 如果做了局部重构，怎么证明行为没变
+
+---
+
+## 与其他指南的关系
+
+- [跨层思考指南](./cross-layer-thinking-guide.md) —— 数据怎么流、在哪变形、谁负责
+- `docs/tech/architecture.md` —— 服务边界、认证、数据所有权、硬规则（**动代码前必读**）
+- `docs/tech/api/README.md` §9 —— 新增一个接口的 5 步
+- `docs/README.md` §3 —— 文档维护规则与冲突优先级
+
+**契约的唯一事实来源是 `docs/tech/`**，本目录只讲"怎么想、怎么查"，不复制契约内容。
+
+---
+
+## 经验教训
+
+修完非平凡 bug 后，把教训补到这里（症状 → 原因 → 怎么避免）：
+
+| 症状 | 原因 | 怎么避免 |
+|---|---|---|
+| 线上 404，本地正常 | 漏了 `/api/v1/` 前缀 | 一律走 `apiFetch` |
+| 时间差 8 小时 | 中途按本地时区处理 | 存 UTC，展示再转 |
+| 页面白屏 | 只写了成功态 | 五种状态齐全 |
+| 越权读数据 | 查询漏了 `user_id` | 所有业务查询按用户隔离 |
+| 迁移漂移 | 手改了表 | 只走 Alembic，`alembic check` 无漂移 |
+
+### 验证命令
+
+改动完成后按项目实际方式验证：
+
+```bash
+# web 侧（web/ 目录下）—— 三项合一
+npm run check        # = typecheck + lint + test（vitest）
+
+# service 侧（service/ 目录下）
+ruff check .
+pytest
+
+# 数据基线（service/ 目录下）
+alembic check        # 应无漂移
 ```
 
----
-
-## When to Use This Checklist
-
-| Trigger                                    | Action                    |
-| ------------------------------------------ | ------------------------- |
-| About to add a constant                    | Run through Section 1     |
-| About to implement logic                   | Run through Section 2     |
-| About to define a type or schema           | Run through Section 3     |
-| About to create a component                | Run through Section 4     |
-| About to add an oRPC procedure             | Run through Section 5     |
-| About to add a dependency                  | Run through Section 6     |
-| Feels like you've seen similar code before | **STOP** and search first |
-
----
-
-## Relationship to Other Guides
-
-| Guide                                                         | Focus                     | Timing                      |
-| ------------------------------------------------------------- | ------------------------- | --------------------------- |
-| **Pre-Implementation Checklist** (this)                       | Questions before coding   | Before writing code         |
-| [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Data flow across layers   | Complex feature planning    |
-
-**Ideal workflow:**
-
-1. Read this checklist before coding
-2. Use Cross-Layer guide for features spanning multiple layers
-
----
-
-## Lessons Learned
-
-| Date | Issue                                          | Lesson                                                                |
-| ---- | ---------------------------------------------- | --------------------------------------------------------------------- |
-| -    | Zod schema redefined in frontend and backend   | Always derive frontend types from the API package's Zod schemas       |
-| -    | `useQuery` used where Server Component sufficed | Ask "does this need interactivity?" before reaching for React Query   |
-| -    | Manual query keys diverged from oRPC keys      | Always use `orpc.xxx.key()` or `orpc.xxx.queryKey()` for cache ops   |
-| -    | Type defined in both app and api package       | Cross-boundary types must be defined once in the API module           |
-
----
-
-**Core Principle**: 5 minutes of checklist thinking saves 50 minutes of refactoring.
+**验证 ≠ 确认**：跑过才算验证；"看了代码觉得应该没问题"只是确认。
