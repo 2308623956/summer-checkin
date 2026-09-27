@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # deploy.sh — Summer Checkin Docker 容器管理脚本
 #
 # 用法：
