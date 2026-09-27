@@ -141,7 +141,7 @@ LIMIT $3;                      -- topK 默认 5
 | 变量 | 用途 | 必填 | 备注 |
 |---|---|---|---|
 | `SUMMER_DATABASE_URL` | PostgreSQL 连接 | ✅ | 缺失**拒绝启动** |
-| `SUMMER_JWT_PUBLIC_KEY` | 校验 web 签发的 JWT | ✅ | 缺失拒绝启动（不允许静默无鉴权） |
+| `SUMMER_JWT_SECRET` | JWT 签发与验签（HS256） | ✅ | 缺失拒绝启动；至少 32 字节；`openssl rand -base64 32` |
 | `SUMMER_CRON_SECRET` | `POST /cron/daily` 的 Bearer | ✅ | `openssl rand -hex 32` |
 | `SUMMER_AGNES_API_KEY` / `_BASE_URL` | 首选模型 | ✅ | 免费额度 |
 | `SUMMER_ALIYUN_API_KEY` | 降级链 | ✅ | 与 `EMBEDDING_API_KEY` 同一个 key |
@@ -156,7 +156,7 @@ LIMIT $3;                      -- topK 默认 5
 | `SUMMER_ENV` | 环境名 | 否 | 默认 `development`；`/meta` 返回它 |
 | `SUMMER_AUTO_MIGRATE` | 启动时自动迁移 | 否 | 默认 **false**；**本地开发设 true，生产固定 false**（§6.1.1） |
 
-**R000 的实际必填项只有前三行**（`DATABASE_URL` / `JWT_PUBLIC_KEY` / `CRON_SECRET`）：
+**R000 的实际必填项只有前三行**（`DATABASE_URL` / `JWT_SECRET` / `CRON_SECRET`）：
 模型与 OSS 的 key 在 `service/app/core/config.py` 里**还没有字段**——R000 不调模型、不签 OSS URL。
 到 `integrations.md` §2 的模型池真正接上时再加字段并转为必填；
 现在把它们写成必填只会让本地启动因一堆用不到的变量而失败。
@@ -168,8 +168,7 @@ LIMIT $3;                      -- topK 默认 5
 | `DATABASE_URL` | Better Auth / Kysely（**只连认证表**） | ✅ |
 | `BETTER_AUTH_SECRET` | 会话签名（`openssl rand -base64 32`） | ✅ |
 | `BETTER_AUTH_URL` | 认证回调地址（与对外域名一致） | ✅ |
-| `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Server Actions（`openssl rand -hex 32`） | ✅ |
-| `SUMMER_JWT_PRIVATE_KEY` | 签发给 service 的 JWT | ✅ |
+| `JWT_SECRET` | 签发给 service 的 JWT（与 service 共用） | ✅ |
 | `SUMMER_SERVICE_URL` | 仅本地开发 rewrite 用 | 否 |
 
 ### 5.3 密钥纪律
@@ -177,7 +176,7 @@ LIMIT $3;                      -- topK 默认 5
 - `.env` 一律进 `.gitignore`；仓库只留 `.env.example`（占位值，不写真值）。
 - 生产用 compose 的 `env_file` + 服务器文件权限 `600`；容器内不通过 `docker inspect` 可读（避免把密钥写进命令行参数）。
 - 日志与错误响应**不得**出现 key、简历正文、作答原文。
-- 轮换：JWT 用**双公钥过渡**（service 同时接受新旧公钥 → web 换签发密钥 → 观察一个周期后移除旧公钥）；OSS / 模型 key 轮换走"新建 key → 更新 env → 重启 → 观察 → 禁用旧 key"。
+- 轮换：JWT 密钥轮换时需要同时更新 web 和 service 的 `JWT_SECRET`；OSS / 模型 key 轮换走"新建 key → 更新 env → 重启 → 观察 → 禁用旧 key"。
 
 ## 6. Docker Compose
 

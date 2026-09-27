@@ -13,14 +13,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.errors import AuthRequiredError, ForbiddenError
-from app.core.security import SERVICE_TOKEN_COOKIE, decode_token, verify_public_key
+from app.core.security import SERVICE_TOKEN_COOKIE, decode_token
 from tests.helpers import (
     TEST_CRON_SECRET,
+    TEST_JWT_SECRET,
     TEST_USER_ID,
     auth_header,
     expired_token,
-    hs256_token_using_public_key_as_secret,
-    key_pair,
     token_signed_by_another_key,
 )
 
@@ -110,41 +109,29 @@ def test_token_signed_by_another_key_is_rejected(client: TestClient) -> None:
 
 
 def test_token_without_subject_is_rejected(client: TestClient) -> None:
-    token = jwt.encode({"exp": int(time.time()) + 900}, key_pair()[0], algorithm="RS256")
+    token = jwt.encode({"exp": int(time.time()) + 900}, TEST_JWT_SECRET, algorithm="HS256")
     response = client.get("/api/v1/checkins", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
 def test_token_without_expiry_is_rejected(client: TestClient) -> None:
     """不过期的 token 等于永久凭据，必须拒绝（`options={"require": ["exp"]}`）。"""
-    token = jwt.encode({"sub": TEST_USER_ID}, key_pair()[0], algorithm="RS256")
+    token = jwt.encode({"sub": TEST_USER_ID}, TEST_JWT_SECRET, algorithm="HS256")
     response = client.get("/api/v1/checkins", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
 def test_alg_none_token_is_rejected(client: TestClient) -> None:
-    """算法混淆攻击：alg=none 的 token 必须被拒（显式限定 algorithms=["RS256"]）。"""
+    """算法混淆攻击：alg=none 的 token 必须被拒（显式限定 algorithms=["HS256"]）。"""
     token = jwt.encode({"sub": TEST_USER_ID, "exp": int(time.time()) + 900}, None, algorithm="none")
     response = client.get("/api/v1/checkins", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
-def test_hs256_token_signed_with_public_key_is_rejected(client: TestClient) -> None:
-    """更隐蔽的混淆：攻击者用**公钥文本**当 HMAC 密钥签 HS256。
-
-    如果验签时不限定算法，很多库会照 HS256 验，于是公钥（公开信息）就变成了签名密钥。
-    """
-    response = client.get(
-        "/api/v1/checkins", headers={"Authorization": hs256_token_using_public_key_as_secret()}
-    )
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "AUTH_REQUIRED"
-
-
 def test_decode_token_raises_auth_error_not_jwt_error() -> None:
     """业务代码只该看到 AppError 家族，不该被迫 import jwt 的异常。"""
     with pytest.raises(AuthRequiredError):
-        decode_token("garbage", key_pair()[1])
+        decode_token("garbage", TEST_JWT_SECRET)
 
 
 def test_cron_without_credentials_returns_403_forbidden(client: TestClient) -> None:
@@ -176,53 +163,3 @@ def test_cron_secret_is_not_a_user_credential(client: TestClient) -> None:
 
 def test_forbidden_error_maps_to_403() -> None:
     assert ForbiddenError().status_code == 403
-
-
-def test_verify_public_key_accepts_valid_rsa_key() -> None:
-    verify_public_key(key_pair()[1])
-
-
-def test_verify_public_key_rejects_garbage() -> None:
-    with pytest.raises(RuntimeError, match="合法的 PEM 公钥"):
-        verify_public_key("not a pem at all")
-
-
-def test_verify_public_key_rejects_empty() -> None:
-    with pytest.raises(RuntimeError):
-        verify_public_key("")
-
-
-def test_verify_public_key_rejects_non_rsa_key() -> None:
-    """换成 EC 公钥必须拒绝：web 用 RS256 签，验签算法与密钥类型必须匹配。"""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import ec
-
-    ec_key = ec.generate_private_key(ec.SECP256R1())
-    ec_public = (
-        ec_key.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode()
-    )
-    with pytest.raises(RuntimeError, match="必须是 RSA 公钥"):
-        verify_public_key(ec_public)
-
-
-def test_verify_public_key_rejects_short_key() -> None:
-    """1024 位的 RSA 已不被认为是安全强度。"""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    weak = rsa.generate_private_key(public_exponent=65537, key_size=1024)
-    weak_public = (
-        weak.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode()
-    )
-    with pytest.raises(RuntimeError, match="长度不足"):
-        verify_public_key(weak_public)

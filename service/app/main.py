@@ -1,6 +1,6 @@
 """FastAPI 应用装配。
 
-启动自检的顺序很重要：**先校验配置与公钥，再连数据库**。缺公钥就拒绝启动，
+启动自检的顺序很重要：**先校验配置，再连数据库**。缺密钥就拒绝启动，
 绝不允许"配置不全 → 无鉴权放行"这种降级（`docs/tech/backend.md` §5.4）。
 """
 
@@ -18,7 +18,6 @@ from app.api.v1 import api_router
 from app.core.config import Settings, get_settings
 from app.core.handlers import register_exception_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
-from app.core.security import verify_public_key
 from app.db.session import dispose_engine, get_engine, init_engine, ping
 
 logger = structlog.get_logger()
@@ -56,9 +55,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    # 1. 公钥可解析性：格式错了要在这里炸，而不是等第一个用户登录。
-    verify_public_key(settings.jwt_public_key)
-    logger.info("startup: jwt public key ok")
+    # 1. JWT 密钥存在性：缺失直接拒绝启动（不允许静默降级成无鉴权）
+    if not settings.jwt_secret or len(settings.jwt_secret) < 32:
+        raise RuntimeError(
+            "SUMMER_JWT_SECRET 未配置或长度不足（至少 32 字符）。"
+            "生成：openssl rand -base64 32"
+        )
+    logger.info("startup: jwt secret ok")
 
     # 2. 迁移（仅开发期）。
     if settings.auto_migrate:

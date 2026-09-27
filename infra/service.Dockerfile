@@ -27,4 +27,5 @@ EXPOSE 8000
 
 # 注意：这里**不跑迁移**。迁移由 infra/deploy.sh 显式执行，
 # 否则多实例同时启动会并发跑迁移（architecture.md §6）。
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 端口从环境变量读取，默认 8000
+CMD ["/bin/sh", "-c", "/app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${SERVICE_PORT:-8000}"]

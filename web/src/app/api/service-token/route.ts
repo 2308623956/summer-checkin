@@ -1,13 +1,13 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { SignJWT, importPKCS8 } from "jose";
+import { SignJWT } from "jose";
 
 import { auth } from "@/lib/auth";
 
 /**
  * 签发 service 用的短期 JWT（`docs/tech/frontend.md` §5）。
  *
- * - **私钥只在 web 侧**，service 只有公钥：签发权不扩散（`design.md` D2）。
+ * - **对称密钥 HS256**：web 和 service 共用 `JWT_SECRET`，简化配置。
  * - 只承载 `sub`（= `user.id`）与 `email`，有效期 15 分钟。
  * - 写进 httpOnly cookie，浏览器拿不到 token 内容，也不需要拿。
  */
@@ -25,23 +25,22 @@ export async function POST() {
     );
   }
 
-  const privateKeyPem = process.env.SUMMER_JWT_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!privateKeyPem) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
     // 配置缺失是服务端问题，不该让前端看到细节，但服务端要能立刻定位。
-    console.error("[service-token] SUMMER_JWT_PRIVATE_KEY is not configured");
+    console.error("[service-token] JWT_SECRET is not configured");
     return NextResponse.json(
       { error: { code: "INTERNAL", message: "服务配置缺失" } },
       { status: 500 },
     );
   }
 
-  const key = await importPKCS8(privateKeyPem, "RS256");
   const token = await new SignJWT({ email: session.user.email })
-    .setProtectedHeader({ alg: "RS256" })
+    .setProtectedHeader({ alg: "HS256" })
     .setSubject(session.user.id)
     .setIssuedAt()
     .setExpirationTime(`${TOKEN_TTL_SECONDS}s`)
-    .sign(key);
+    .sign(new TextEncoder().encode(secret));
 
   const response = NextResponse.json({ data: { expiresIn: TOKEN_TTL_SECONDS } });
   response.cookies.set(SERVICE_COOKIE, token, {

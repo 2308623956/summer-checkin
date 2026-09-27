@@ -21,11 +21,11 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.helpers import TEST_CRON_SECRET, TEST_DB_URL, key_pair
+from tests.helpers import TEST_CRON_SECRET, TEST_DB_URL, TEST_JWT_SECRET
 
 # 导入即生效：见模块 docstring。
 os.environ.setdefault("SUMMER_DATABASE_URL", TEST_DB_URL)
-os.environ.setdefault("SUMMER_JWT_PUBLIC_KEY", key_pair()[1])
+os.environ.setdefault("SUMMER_JWT_SECRET", TEST_JWT_SECRET)
 os.environ.setdefault("SUMMER_CRON_SECRET", TEST_CRON_SECRET)
 os.environ.setdefault("SUMMER_AUTO_MIGRATE", "false")
 os.environ.setdefault("SUMMER_VERSION", "test")

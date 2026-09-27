@@ -1,4 +1,10 @@
+import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
+import path from "node:path";
+
+// 从仓库根加载 .env.local / .env
+// Next.js 默认只加载自己目录的 .env*，这里让它读根目录的统一配置
+loadEnvConfig(path.resolve(__dirname, ".."));
 
 const nextConfig: NextConfig = {
   reactCompiler: true,

@@ -7,22 +7,33 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: 仓库根。`.env` / `.env.local` 放这里，**两个服务读同一份**。
+#: `app/core/config.py` → `app/core` → `app` → `service` → 仓库根。
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="SUMMER_",
-        env_file=".env",
+        # 用绝对路径锚定仓库根：`env_file=".env"` 是相对**当前工作目录**的，
+        # 从 service/ 启动只会找到 service/.env，从仓库根启动又换一个文件——
+        # 同一份代码在不同目录下读到不同配置，是很难查的故障。
+        # 注意顺序：先 .env.local（本地开发），后 .env（Docker/服务器）。
+        # 文件不存在时 pydantic 静默忽略，所以两边都不会因为缺文件而报错。
+        env_file=(str(REPO_ROOT / ".env.local"), str(REPO_ROOT / ".env")),
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     # --- 必需 ---
-    database_url: str = Field(description="PostgreSQL 连接串（asyncpg）")
-    jwt_public_key: str = Field(description="校验 web 签发 JWT 的 RS256 公钥（PEM）")
+    # 标准 PostgreSQL URL，代码里自动转成 asyncpg 格式（见 async_database_url 属性）
+    database_url: str = Field(description="PostgreSQL 连接串")
+    jwt_secret: str = Field(description="JWT 签发与验签的对称密钥（HS256）")
     cron_secret: str = Field(description="POST /cron/daily 的 Bearer")
 
     # --- 可选（默认值即契约默认值）---
@@ -42,25 +53,16 @@ class Settings(BaseSettings):
     # 本地开发 rewrite 用；线上同域经 nginx，不需要。
     service_url: str = "http://127.0.0.1:8000"
 
-    @field_validator("jwt_public_key")
-    @classmethod
-    def _normalize_public_key(cls, value: str) -> str:
-        """环境变量里换行常被写成字面量 `\\n`，这里还原成真换行。
-
-        PEM 少了换行会导致验签全部失败，而报错信息通常看不出是这个原因。
+    @property
+    def async_database_url(self) -> str:
+        """转换成 SQLAlchemy asyncpg 驱动格式。
+        
+        .env 里只维护标准格式 `postgresql://...`（与 web 的 Kysely 共用），
+        service 用这个属性拿到 `postgresql+asyncpg://...` 格式。
         """
-        key = value.strip()
-        if "\\n" in key:
-            key = key.replace("\\n", "\n")
-        return key
-
-    @field_validator("database_url")
-    @classmethod
-    def _require_async_driver(cls, value: str) -> str:
-        """必须是 asyncpg 驱动：同步驱动会在 async 代码里把事件循环堵死。"""
-        if not value.startswith("postgresql+asyncpg://"):
-            raise ValueError("SUMMER_DATABASE_URL 必须以 postgresql+asyncpg:// 开头")
-        return value
+        if self.database_url.startswith("postgresql+asyncpg://"):
+            return self.database_url
+        return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 
 @lru_cache

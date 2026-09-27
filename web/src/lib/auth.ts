@@ -28,6 +28,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  // 构建时可能没有环境变量（worker 进程），给默认值避免报错
+  secret: process.env.BETTER_AUTH_SECRET || "build-time-placeholder-secret-min-32-chars-long",
+  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   user: {
     fields: {
       emailVerified: "email_verified",

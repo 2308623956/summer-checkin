@@ -30,7 +30,7 @@ def init_engine(settings: Settings) -> AsyncEngine:
     global _engine, _session_factory
     if _engine is None:
         _engine = create_async_engine(
-            settings.database_url,
+            settings.async_database_url,
             pool_pre_ping=True,  # 连的是长连接，防止拿到已被服务端断开的连接
             pool_size=5,
             max_overflow=5,

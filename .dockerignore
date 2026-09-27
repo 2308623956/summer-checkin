@@ -1,0 +1,48 @@
+# Docker 构建上下文排除表（构建上下文 = 仓库根，见 infra/*.Dockerfile 的 `context: ..`）。
+#
+# 没有这个文件时，`docker build` 会把仓库根下所有东西打包发给 daemon：
+# web/node_modules 约 556MB、service/.venv 约 87MB、web/.next 约 38MB。
+# 这些都不是构建输入（Dockerfile 里有各自的 npm ci / uv sync），白传一遍很慢。
+
+# --- 依赖与构建产物（镜像内会重新装）---
+**/node_modules
+**/.venv
+**/.next
+**/out
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+**/*.tsbuildinfo
+
+# --- 环境与密钥：绝不进镜像层 ---
+# 构建期不需要真值：web 的 next build 在无环境变量时也能通过（实测）。
+# 运行期的变量由 compose 注入，不靠 COPY。
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+
+# --- 版本库与本地工具目录 ---
+.git
+.gitattributes
+.github
+.agents
+.dsh
+.trellis
+
+# --- 文档与许可（运行时用不到）---
+docs
+*.md
+!service/README.md
+
+# --- 编辑器与系统 ---
+**/.DS_Store
+**/Thumbs.db
+**/.idea
+**/.vscode
+**/*.log

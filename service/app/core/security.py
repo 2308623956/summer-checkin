@@ -2,9 +2,8 @@
 
 三条不可动摇的规则（`docs/tech/architecture.md` §3.1）：
 
-1. **service 只验签，不签发、不持有私钥**。私钥只在 web 侧，service 拿到私钥就等于
-   任何人拿到私钥——签发权不扩散。
-2. **拿不到公钥就拒绝启动**，不是"放行所有请求"。
+1. **对称密钥 HS256**：web 和 service 共用 `JWT_SECRET`，签发与验签都用同一密钥。
+2. **拿不到密钥就拒绝启动**，不是"放行所有请求"。
 3. `user_id` 只从验签通过的 token 里取，**绝不从请求体或查询参数取**。
 """
 
@@ -20,7 +19,7 @@ from fastapi import Depends, Request
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthRequiredError, ForbiddenError
 
-ALGORITHM = "RS256"
+ALGORITHM = "HS256"
 
 # 与 web 侧 `src/app/api/service-token/route.ts` 的常量必须一致。
 # 这是两个服务之间唯一共享的"名字"，改名要同时改两边。
@@ -37,14 +36,13 @@ class CurrentUser:
     email: str | None = None
 
 
-def decode_token(token: str, public_key: str) -> dict[str, object]:
+def decode_token(token: str, secret: str) -> dict[str, object]:
     """验签并解码。任何问题（过期、签名错、算法不符）都抛 AuthRequiredError。"""
     try:
         return jwt.decode(
             token,
-            public_key,
-            # 显式只允许 RS256：不写 algorithms 的话，攻击者可把 alg 改成 none 或 HS256，
-            # 用公钥当 HMAC 密钥来伪造签名。
+            secret,
+            # 显式只允许 HS256：不写 algorithms 的话，攻击者可把 alg 改成 none。
             algorithms=[ALGORITHM],
             options={"require": ["exp", "sub"]},
         )
@@ -80,7 +78,7 @@ async def get_current_user(request: Request, settings: SettingsDep) -> CurrentUs
     token = _extract_user_token(request)
     if token is None:
         raise AuthRequiredError()
-    payload = decode_token(token, settings.jwt_public_key)
+    payload = decode_token(token, settings.jwt_secret)
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
         raise AuthRequiredError("登录状态无效，请重新登录")
@@ -98,30 +96,3 @@ async def require_cron_secret(request: Request, settings: SettingsDep) -> None:
         # 这里回 FORBIDDEN 而不是 AUTH_REQUIRED：它不是在说"请登录"，
         # 而是在说"这个凭据不对"（`prd.md` §10 第 12 行的期望）。
         raise ForbiddenError("凭据无效")
-
-
-def verify_public_key(public_key: str) -> None:
-    """启动自检：公钥能用就通过，否则立刻失败——不要等第一个用户登录才发现配错了。
-
-    只做"能否解析成 RS256 公钥"这一件事：生成一对临时密钥来跑完整验签会拖慢每次启动
-    （2048 位密钥生成约 100ms），而它检验的是同一件事。
-    """
-    from cryptography.exceptions import UnsupportedAlgorithm
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    from cryptography.hazmat.primitives.serialization import load_pem_public_key
-
-    try:
-        loaded = load_pem_public_key(public_key.encode())
-    except (ValueError, UnsupportedAlgorithm) as exc:
-        raise RuntimeError(
-            f"SUMMER_JWT_PUBLIC_KEY 不是合法的 PEM 公钥：{exc}。"
-            "注意环境变量里的换行要写成 \\n，或使用多行值。"
-        ) from exc
-
-    if not isinstance(loaded, rsa.RSAPublicKey):
-        raise RuntimeError(
-            "SUMMER_JWT_PUBLIC_KEY 必须是 RSA 公钥（web 侧用 RS256 签发），"
-            f"实际是 {type(loaded).__name__}"
-        )
-    if loaded.key_size < 2048:
-        raise RuntimeError(f"SUMMER_JWT_PUBLIC_KEY 长度不足：{loaded.key_size} 位，至少 2048 位")

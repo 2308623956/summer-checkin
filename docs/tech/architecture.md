@@ -83,7 +83,7 @@ sequenceDiagram
     U->>N: 请求页面 → web
     U->>N: 调用 /api/v1/*（浏览器自动带上 cookie）
     N->>S: 转发
-    S->>S: 验签（RS256 公钥）+ 取 sub=user_id
+    S->>S: 验签（HS256 对称密钥）+ 取 sub=user_id
     S-->>U: 业务数据（按 user_id 隔离）
 ```
 
@@ -94,18 +94,14 @@ sequenceDiagram
 
 | 项 | 决定 |
 |---|---|
-| 算法 | **RS256**（非对称，2048 位） |
-| 公钥分发 | **静态配置**：`SUMMER_JWT_PUBLIC_KEY` 直接放 PEM 文本，**不用 JWKS 端点** |
-| 签发方 | web 的 `/api/service-token`（`jose` 库），私钥只存在 web 的环境变量里 |
+| 算法 | **HS256**（对称密钥，至少 32 字节） |
+| 密钥分发 | **静态配置**：`JWT_SECRET` 存在环境变量，web 和 service 共用 |
+| 签发方 | web 的 `/api/service-token`（`jose` 库） |
 | 令牌传递 | httpOnly cookie `summer_service_jwt`；`Authorization: Bearer` **优先于** cookie（供 CLI/CI 覆盖） |
-| 载荷 | 只放 `sub`（=`user.id`）、`iat`、`exp`、`iss` |
+| 载荷 | 只放 `sub`（=`user.id`）、`email`、`iat`、`exp` |
 
-**为什么不用 JWKS**：JWKS 的价值在于密钥轮换与多签发方。本项目只有一个签发方，
-两个进程（web 与 service）都在自己的环境变量里，静态公钥少一个网络依赖、少一处故障点，
-也少一个"启动时 JWKS 拉不到就全站 401"的隐患。密钥轮换时同步改两处 `SUMMER_JWT_PUBLIC_KEY` 即可。
-
-**为什么不用 HS256**：对称密钥会让 **service 具备签发能力**。签发权应只属于 web——
-service 一旦拿去签，任何能读 service 环境变量的人都能伪造任意用户的身份。
+**为什么用 HS256 而不是 RS256**：本项目只有一个签发方（web）和一个验签方（service），
+对称密钥足够且更简单。RS256 的优势在于多个验签方可以共享公钥，但这个项目用不上。
 
 - 服务间不互相调用（首期）：浏览器直接调 `/api/v1/*`，无需 BFF 转发，少一跳。
 
@@ -243,7 +239,7 @@ graph TB
 - **Docker 从 R000 起就要能跑**：`web/` 与 `service/` 各一份 Dockerfile，`infra/docker-compose.yml` 编排 web / service / db / nginx 四个容器（部署形态），`infra/docker-compose.dev.yml` 只起 db 供本地热重载开发；service 单 worker（agent 任务重、并发低），需要横向扩展时再拆调度。**部署形态与开发形态必须一致，晚做适配等于重做一遍。**
 - **数据库跑在容器里**（本地与服务器同一镜像，带 pgvector 扩展）：不存在"连接某台已有服务器上的库"这种情况。
 - **迁移在部署流程里显式执行**：`alembic upgrade head` 由部署脚本或一次性 job 运行，不在容器启动时隐式跑。
-- **配置**：service 用 `SUMMER_` 前缀环境变量（`SUMMER_DATABASE_URL`、`SUMMER_JWT_PUBLIC_KEY`、`SUMMER_MODEL_*`…），web 沿用现有变量名（`BETTER_AUTH_*`、`DATABASE_URL`、`OSS_*`），两者共用一份 `.env` 文件的不同段落。
+- **配置**：service 用 `SUMMER_` 前缀环境变量（`SUMMER_DATABASE_URL`、`SUMMER_JWT_SECRET`、`SUMMER_MODEL_*`…），web 沿用现有变量名（`BETTER_AUTH_*`、`DATABASE_URL`、`JWT_SECRET`、`OSS_*`），两者共用一份 `.env` 文件的不同段落。
 
 ## 7. 跨领域约定
 
