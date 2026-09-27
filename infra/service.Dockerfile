@@ -14,11 +14,13 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # 先只拷依赖清单：改代码不会让依赖层缓存失效。
-COPY service/pyproject.toml service/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# --mount=type=cache：uv 的下载缓存跨构建持久化，这层重建时也只下增量。
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 COPY service/ ./
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # 非 root 运行：容器被攻破时不要连带拿到宿主机的 root。
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
