@@ -73,6 +73,16 @@ max_journal_lines: 2000
 #     path: ./webapp
 #     git: true
 
+# Declared packages for this project (see docs/tech/architecture.md §4).
+# No `default_package`: early tasks touch both sides (R000 changes web and
+# service together), so an unset value means "unspecified" rather than
+# silently resolving every task to one package.
+packages:
+  web:
+    path: web
+  service:
+    path: service
+
 # Default package used when --package is not specified.
 # default_package: frontend
 
