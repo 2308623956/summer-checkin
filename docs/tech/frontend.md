@@ -2,6 +2,7 @@
 
 > web 只做两件事：**渲染页面**和**管登录**。所有业务数据都从 `/api/v1/*` 来（service 提供），web 侧不出现任何业务表访问。
 > 路由与页面清单来自对参考工程的实测（`src/app` 下 15 个 `page.tsx`），目标结构是 15 个页面 + 2 个新页面 = **17 个**。
+> **落地进度**：R000 已建好那 15 个页面（`/review` 与 `/agent/eval` 除外，它们各自等对应需求——复盘与回归评测——再建；现在建出来只有空壳，且会让导航出现点进去没东西的入口）。
 
 ## 1. 目标目录结构
 
@@ -172,7 +173,7 @@ web/
 
 - **两个 cookie**：Better Auth 的会话 cookie（页面与 `/api/auth/*` 用）与 `summer_service_jwt`（`/api/v1/*` 用）。后者 `httpOnly`、`SameSite=Lax`、有效期 15 分钟，页面加载时若缺失或剩余 < 5 分钟则静默续签。
 - **为什么两个**：会话 cookie 是 Better Auth 的格式，service 不想理解它；JWT 只承载 `sub`（= `user.id`）与 `exp`，把"认证"和"业务鉴权"解耦。签发实现前先读 Better Auth 的 JWT 插件文档（`architecture.md` §3.1 已标注）。
-- **受保护路由**：`(dashboard)/**` 与 `/agent/**` 由 `middleware.ts` 校验会话 cookie 存在，缺失 → 302 `/login?returnTo=<path>`。
+- **受保护路由**：`(dashboard)/**` 与 `/agent/**` 由 `proxy.ts` 校验会话 cookie 存在，缺失 → 302 `/login?returnTo=<path>`。（Next 16 把 `middleware.ts` 改名为 `proxy.ts`，导出的函数也叫 `proxy`；构建时会把它重命名为 `middleware.js`，功能不变。）
 - **CLI / CI**：用 `Authorization: Bearer <JWT>`（由 `/api/service-token` 换），service 优先读 header。
 - **登出**：清会话 + 清 `summer_service_jwt`。
 - **本地开发**：`next.config.ts` 里把 `/api/v1/:path*` rewrite 到 `SUMMER_SERVICE_URL`；生产环境由 nginx 分流，web 无需改配置。
@@ -242,16 +243,18 @@ export async function streamSSE(path: string, body: unknown, on: { meta?, delta?
 
 | 页面 | 已改为调 `/api/v1/*` | 无控制台报错 | 空态 | 备注 |
 |---|---|---|---|---|
-| `/`、`/login`、`/register` | ☐ | ☐ | — | 认证先通，其余页面才可用 |
-| `/checkin` | ☐ | ☐ | ☐ | 主题下拉与题库主题同源 |
-| `/dashboard`、`/statistics` | ☐ | ☐ | ☐ | 依赖 stats 接口（P1） |
-| `/plans`、`/plans/new`、`/plans/[id]`、`/plans/[id]/studio` | ☐ | ☐ | ☐ | |
-| `/docs`、`/docs/[id]`、`/docs/knowledge/[sourceName]` | ☐ | ☐ | ☐ | 导入改 service |
-| `/agent`、`/agent/eval` | ☐ | ☐ | ☐ | 审批卡是重点 |
-| `/review` | ☐ | ☐ | ☐ | 新页面 |
-| `/profile` | ☐ | ☐ | — | 头像改 service 预签名 |
+| `/`、`/login`、`/register` | ☑ | ☑ | — | 认证先通，其余页面才可用 |
+| `/checkin` | ☑ | ☑ | ☑ | R000 无写接口，表单禁用并说明原因；主题下拉等 R004 |
+| `/dashboard`、`/statistics` | ☑ | ☑ | ☑ | 已接 `/stats/overview`、`/checkins`（R000 返回零值/空数组） |
+| `/plans`、`/plans/new`、`/plans/[id]`、`/plans/[id]/studio` | ☑ | ☑ | ☑ | 列表已接 `/plans`；详情与工作室待对应接口 |
+| `/docs`、`/docs/[id]`、`/docs/knowledge/[sourceName]` | ☑ | ☑ | ☑ | 导入改 service（待 `POST /knowledge/documents`） |
+| `/agent` | ☑ | ☑ | ☑ | 已接 `/runs`；审批卡等 R001 |
+| `/agent/eval` | — | — | — | **R000 不建此页**（等回归评测需求） |
+| `/review` | — | — | — | **R000 不建此页**（等复盘需求） |
+| `/profile` | ☑ | ☑ | — | 已接 `/meta` 与 `/notifications`；头像改 service 预签名 |
 
-**完成判据**（R000 验收）：`web/` 内 `grep -r "@prisma|prisma\." src/` 为空；`grep -rl "fetch(\"/api/" src/` 只出现在 `lib/api.ts` 与 SSE 封装里。
+**完成判据**（R000 验收）：`web/` 内 `grep -r "prisma" src/` 为空；
+`grep -rl 'fetch("/api/' src/` 只命中 `lib/api.ts` 与 `lib/service-token.ts`（令牌与登出的出口）。
 
 ---
 
@@ -260,3 +263,4 @@ export async function streamSSE(path: string, body: unknown, on: { meta?, delta?
 | 日期 | 变更 |
 |---|---|
 | 2026-09-25 | 首版：17 个路由表、五态逐页、组件复用清单、令牌传递、fetcher 与错误码映射、依赖增删、迁移销项表 |
+| 2026-09-27 | R000 落地：`middleware.ts` → `proxy.ts`（Next 16 改名）、销项表勾选 15 个页面并标注 `/review` 与 `/agent/eval` 不建的理由 |

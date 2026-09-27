@@ -221,21 +221,30 @@ Trellis 的 `trellis-before-dev` 要求：改动超过一个文件、跨层、�
 | 页面白屏 | 只写了成功态 | 五种状态齐全 |
 | 越权读数据 | 查询漏了 `user_id` | 所有业务查询按用户隔离 |
 | 迁移漂移 | 手改了表 | 只走 Alembic，`alembic check` 无漂移 |
+| `npm run check` 全绿但 `next build` 失败 | typecheck 与 lint 看不见构建期的预渲染约束 | 交付前**两个都跑**（R000 实测：`useSearchParams` 缺 Suspense、reactCompiler 缺 babel 插件都只有构建能抓到） |
+| `alembic` 报 `UnicodeDecodeError` | `alembic.ini` 里有非 ASCII 字符，被按系统 locale 解码 | `alembic.ini` 只写 ASCII |
+| `alembic check` 报漂移但代码没改 | 表达式索引（`desc("col")`）反射不回来 | 用普通 btree |
+| 测试在导入期报配置校验失败 | 环境变量设在了 `Settings` 实例化之后 | 在任何 app 导入之前设好 |
 
 ### 验证命令
 
 改动完成后按项目实际方式验证：
 
 ```bash
-# web 侧（web/ 目录下）—— 三项合一
+# web 侧（web/ 目录下）
 npm run check        # = typecheck + lint + test（vitest）
+npm run build        # 构建期问题只有它能抓到（用占位环境变量即可）
 
 # service 侧（service/ 目录下）
-ruff check .
-pytest
+uv run ruff check .
+uv run pytest        # 不需要数据库
 
-# 数据基线（service/ 目录下）
-alembic check        # 应无漂移
+# 数据基线（service/ 目录下，离线，不需要连库）
+SUMMER_DATABASE_URL="postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test" \
+  uv run alembic upgrade head --sql | grep -c "CREATE TABLE"   # 期望 32
+
+# 真库（需要 SUMMER_DATABASE_URL 指向 _test 库）
+uv run alembic upgrade head && uv run alembic check
 ```
 
 **验证 ≠ 确认**：跑过才算验证；"看了代码觉得应该没问题"只是确认。

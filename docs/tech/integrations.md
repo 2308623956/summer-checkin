@@ -153,6 +153,13 @@ LIMIT $3;                      -- topK 默认 5
 | `SUMMER_SCHEDULE_CRON` | 巡检时间 | 否 | 默认 `0 21 * * *` |
 | `SUMMER_TZ` | 业务日时区 | 否 | 默认 `Asia/Shanghai` |
 | `SUMMER_LOG_LEVEL` | 日志级别 | 否 | 默认 `info` |
+| `SUMMER_ENV` | 环境名 | 否 | 默认 `development`；`/meta` 返回它 |
+| `SUMMER_AUTO_MIGRATE` | 启动时自动迁移 | 否 | 默认 **false**；**本地开发设 true，生产固定 false**（§6.1.1） |
+
+**R000 的实际必填项只有前三行**（`DATABASE_URL` / `JWT_PUBLIC_KEY` / `CRON_SECRET`）：
+模型与 OSS 的 key 在 `service/app/core/config.py` 里**还没有字段**——R000 不调模型、不签 OSS URL。
+到 `integrations.md` §2 的模型池真正接上时再加字段并转为必填；
+现在把它们写成必填只会让本地启动因一堆用不到的变量而失败。
 
 ### 5.2 web
 
@@ -185,13 +192,24 @@ LIMIT $3;                      -- topK 默认 5
 
 - **`service` 必须单 worker**：APScheduler 跑在进程内，多 worker 会让巡检重复触发。要扩并发就把调度拆成独立 `scheduler` 容器并用 advisory lock 防重——**这是升级路径，不是首版要做的事**。
 - 启动顺序：`db` 健康 → `service` 健康（`GET /healthz`）→ `web` → `nginx`。
-- **迁移不隐式执行**：发版时单独跑 `docker compose run --rm service alembic upgrade head`（参考工程的 `docker-entrypoint.sh` 也没有跑迁移，这条沿用）。
+- **迁移不隐式执行**：发版时单独跑 `docker compose run --rm service alembic upgrade head`（参考工程的 `docker-entrypoint.sh` 也没有跑迁移，这条沿用）。R000 把它固化成 `infra/deploy.sh`。
 - 卷：`db_data`（数据库）、`service_tmp`（资料解析临时目录，`tmpfs` 亦可）；`docker compose down` **不带 `-v`**，卷不随容器删除。
 - PDF/Word 解析的 Python 依赖在 **service 镜像**里（`pypdf` / `python-docx`），web 镜像不再装 python（参考实现把 PyPDF2 装进了 web 镜像，重写后这一步挪走）。
+- **`db` 容器挂 `infra/db/init-databases.sh`**：首次启动（数据卷为空）时建出 `summer_checkin` 与 `summer_checkin_test` 两个库并启用 pgvector。脚本幂等，重复执行无副作用。
+
+### 6.1.1 迁移策略（dev 与生产的差别）
+
+| 环境 | 方式 | 原因 |
+|---|---|---|
+| **开发** | `SUMMER_AUTO_MIGRATE=true`，service 启动时自动 `upgrade head`，随后跑 `alembic check` 校验无漂移 | 本地反复改模型，自动跑省掉一步；漂移当场报错，不会拖到线上 |
+| **生产** | `SUMMER_AUTO_MIGRATE=false`（固定），由 `infra/deploy.sh` 显式执行 | 多实例同时启动会并发跑迁移；迁移失败会让容器起不来，排查时只看到"服务启动失败" |
+
+`alembic/env.py` 里**没有**自动升级逻辑，升级只由显式命令或 `AUTO_MIGRATE` 触发——
+这样"迁移什么时候跑的"永远能从部署记录里查到。
 
 ### 6.2 开发（`infra/docker-compose.dev.yml`）
 
-只起 `db`（pgvector 镜像、映射 5432、自动建扩展）；web 用 `pnpm dev`，service 用 `uvicorn --reload`，前端通过 `next.config.ts` 的 rewrite 访问 `/api/v1/*`。**不装本地 PostgreSQL**，从 R000 起就靠容器。
+只起 `db`（pgvector 镜像、映射 5432、挂同一个建库脚本）；web 用 `npm run dev`，service 用 `uvicorn --reload`，前端通过 `next.config.ts` 的 rewrite 访问 `/api/v1/*`。**不装本地 PostgreSQL**，从 R000 起就靠容器。
 
 ## 7. CI/CD 流水线
 
@@ -199,13 +217,18 @@ LIMIT $3;                      -- topK 默认 5
 
 | 工作流 | 触发 | 步骤 | 门禁 |
 |---|---|---|---|
-| `ci.yml` → `web-check` | push / PR | `pnpm install --frozen-lockfile` → `next typegen` → `typecheck` → `lint` → `vitest` | 全绿；另加"web 不含 prisma 引用"的 grep 守卫 |
-| `ci.yml` → `service-check` | push / PR | postgres(pgvector) service container → `uv sync` → `ruff check` → `ruff format --check` → `pytest` → `alembic upgrade head` → `alembic check` | 全绿；含 `execute_action` 调用点守卫单测 |
-| `ci.yml` → `docker-build` | push / PR | buildx 构建 web 与 service 镜像（PR 只构建不推送；main 推送 `ghcr.io/<owner>/summer-checkin-{web,service}:{sha,latest}`） | 构建成功即通过 |
+| `ci.yml` → `web-check` | push / PR | `npm ci` → `typecheck` → `lint` → `vitest` | 全绿；另加"web 不含 prisma 引用"的 grep 守卫 |
+| `ci.yml` → `service-check` | push / PR | `uv sync` → `ruff check` → `ruff format --check` → `pytest` → **离线渲染迁移**并断言对象数量 | 全绿；含跨用户隔离与"无 `user_id` 过滤的查询"守卫单测 |
+| `ci.yml` → `migration-drift` | push / PR | postgres(pgvector) service container → `alembic upgrade head` → `alembic check` → `downgrade base` → `upgrade head` → `pytest` | 无漂移且迁移可逆 |
+| `ci.yml` → `docker-build` | push / PR | 构建 web 与 service 镜像（本期只构建不推送） | 构建成功即通过 |
 | `eval-gate.yml` | `paths: service/app/agent/prompts.py, service/app/llm/**, service/app/rag/**` + 手动 | 起 db，跑 `python -m app.eval --suite daily --baseline <上次>` | 五项指标超阈值即 fail（PRD 3.9） |
 | `deploy.yml` | 手动 `workflow_dispatch`（输入镜像 tag） | 推镜像 → SSH 到服务器 `docker compose pull && up -d` → 跑迁移 → 健康检查 | 健康检查失败即标红并提示回滚 |
 
-- 缓存：`pnpm store`、`uv cache`、buildx `type=gha`。
+**注意 `migration-drift` 与 `service-check` 的分工**：前者需要真库（跑 `alembic check`），后者不需要。
+把"不需要库也能守住的"放进 `service-check`，CI 反馈才快——离线渲染已能发现
+"表数量变了""HNSW 索引被删了"这类最常见的迁移事故。
+
+- 缓存：`npm`（`cache-dependency-path: web/package-lock.json`）、`uv cache`。
 - 不在 CI 里连生产库；`eval-gate` 用**离线 fixture + 记录下来的模型输出**，只有手动触发时才真调模型（省额度、防噪声）。
 
 ## 8. 灰度与回滚
@@ -251,3 +274,4 @@ upstream service_pool {
 | 日期 | 变更 |
 |---|---|
 | 2026-09-25 | 首版：依赖总览、模型池与成本口径、embedding/pgvector 链路、OSS 规范、环境变量清单、Compose 与流水线、灰度与回滚 |
+| 2026-09-27 | R000 落地：`pnpm` → **npm**（§6.2、§7）、补迁移策略（dev 自动 / 生产显式，§6.1.1）、CI 拆出 `migration-drift` 并说明与 `service-check` 的分工 |

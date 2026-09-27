@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  web-check:
+    name: web（typecheck + lint + test）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      # 构建也跑：它能抓到 typecheck/lint 抓不到的问题（实测抓到过
+      # reactCompiler 缺 babel 插件、useSearchParams 缺 Suspense 边界两处）。
+      # 用占位环境变量即可——构建不连库，Better Auth 的 schema 校验失败只打日志。
+      - name: 构建（占位环境变量）
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+          BETTER_AUTH_SECRET: ci-build-placeholder-secret-0000
+          BETTER_AUTH_URL: http://localhost:3000
+        run: npm run build
+
+  service-check:
+    name: service（ruff + pytest + 迁移渲染）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.6"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+      # 迁移的正确性用离线渲染验证（不需要数据库）：
+      # 断言恰好 31 张业务表 + alembic_version、2 条 HNSW 索引、1 条 pgvector 扩展。
+      - name: 渲染迁移 DDL 并校验对象数量
+        run: |
+          set -euo pipefail
+          export SUMMER_DATABASE_URL="postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test"
+          uv run alembic upgrade head --sql > /tmp/schema.sql
+          tables=$(grep -c "CREATE TABLE" /tmp/schema.sql)
+          hnsw=$(grep -c "USING hnsw" /tmp/schema.sql)
+          ext=$(grep -c "CREATE EXTENSION" /tmp/schema.sql)
+          echo "tables=$tables hnsw=$hnsw extension=$ext"
+          test "$tables" -eq 32   # 31 张业务表 + alembic_version
+          test "$hnsw" -eq 2
+          test "$ext" -eq 1
+
+  migration-drift:
+    name: 迁移漂移检查（真库）
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: summer_checkin_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.6"
+      - run: uv sync --frozen
+      - name: 建扩展并跑迁移
+        env:
+          PGPASSWORD: ci
+          SUMMER_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test
+        run: |
+          set -euo pipefail
+          uv run python -c "
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect('postgresql://ci:ci@localhost:5432/summer_checkin_test')
+              await conn.execute('CREATE EXTENSION IF NOT EXISTS vector')
+              await conn.close()
+          asyncio.run(main())
+          "
+          uv run alembic upgrade head
+          uv run alembic check
+          uv run alembic current --check-heads
+          # 可逆性：能从零重建（库名带 _test，护栏放行）。
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run pytest -q
+
+  docker-build:
+    name: 镜像构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 构建 service 镜像
+        run: docker build -f infra/service.Dockerfile -t summer-service:ci .
+      - name: 构建 web 镜像
+        run: docker build -f infra/web.Dockerfile -t summer-web:ci .

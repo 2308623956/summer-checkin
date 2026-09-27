@@ -9,13 +9,15 @@
 
 | 分册 | 模块 | 端点数 | P0 / P1 |
 |---|---|---|---|
-| `01-system.md` | 系统、定时与上传 | 4 | 4 / 0 |
+| `01-system.md` | 系统、定时与上传 | 4（+1 样例） | 4 / 0 |
 | `02-study.md` | 打卡、计划、任务 | 8 | 6 / 2 |
 | `03-agent.md` | 巡检、审批、成本、弱项、通知 | 9 | 8 / 1 |
 | `04-quiz.md` | 题库复盘与知识导入 | 6 | 6 / 0 |
 | `05-resume.md` | 简历复盘 | 5 | 5 / 0 |
 | `06-stats-eval.md` | 统计与回归 | 7 | 0 / 7 |
-| **合计** | | **39** | **29 / 10** |
+| **合计** | | **39**（+1 样例） | **29 / 10** |
+
+> `GET /example`（`01-system.md` §1.5）是**非产品接口**，只为验证"新增一个接口的 5 步"可执行，不计入 39 个产品端点。
 
 ## 2. 前缀、版本与内容协商
 
@@ -106,6 +108,34 @@
 
 **OpenAPI**：FastAPI 自动生成 `/api/v1/openapi.json`；`/docs` 仅在本地/内网开启（生产用 nginx 屏蔽或加 Basic 认证）。
 
+### 9.1 本项目的坑（R000 实测记录）
+
+这四条都是"照常规做法写会静默出错"的地方：
+
+| 坑 | 症状 | 怎么做 |
+|---|---|---|
+| **路径漏 `/api/v1/` 前缀** | 本地直连端口一切正常，线上 404 | 前缀在 `app/api/v1/__init__.py` 的 `APIRouter(prefix=...)` 统一加；nginx 按 `/api/v1/` 分流，漏了就被交给 web |
+| **`user_id` 从请求参数取** | 越权读到别人的数据 | 只能从验签后的 token 取（`get_current_user`）；`tests/test_isolation.py` 有守卫测试 |
+| **模型改了没写迁移** | 服务带着"代码以为存在的列"启动，报错出现在业务查询里 | `SUMMER_AUTO_MIGRATE=true` 时启动会跑 `alembic check`，有漂移直接拒绝启动；CI 也有一道 |
+| **手写 DDL / 手改数据库** | `alembic check` 报漂移，回退时留残骸 | DDL 只出现在 `alembic/versions/`；`CREATE EXTENSION`、`vector(1024)` 列、`USING hnsw` 索引三处必须手写（autogenerate 认不出来） |
+
+还有两条迁移侧的能力边界，值得单独记住：
+
+- **表改名与列改名检测不出来**：autogenerate 会渲染成 `drop_table` + `create_table`，照执行等于删数据。改名必须手写 `op.alter_column(..., new_column_name=...)`。
+- **`compare_server_default` 默认关闭**：改默认值不会被 `alembic check` 发现，要自己留意。
+
+### 9.2 一个可照着抄的样例
+
+`GET /api/v1/example` 是按上面 5 步走完的最小实现，可作为模板：
+
+| 步骤 | 落点 |
+|---|---|
+| 1. 契约 | `api/01-system.md` |
+| 2. schema | `service/app/schemas/system.py` 的 `ExampleData` |
+| 3. 薄路由 | `service/app/api/v1/system.py` 的 `example()`——只做鉴权与包装，没有业务逻辑 |
+| 4. 服务层 | R000 阶段无业务规则，故直接返回；有规则时放 `app/services/` |
+| 5. 测试 | `service/tests/test_envelope.py::test_example_endpoint_*` |
+
 ---
 
 **变更记录**
@@ -113,3 +143,4 @@
 | 日期 | 变更 |
 |---|---|
 | 2026-09-25 | 首版：总则 + 38 个端点的分册索引与优先级 |
+| 2026-09-27 | R000：补 §9.1 本项目的坑与 §9.2 可抄样例（迁移纪律、路径前缀、user_id 来源） |

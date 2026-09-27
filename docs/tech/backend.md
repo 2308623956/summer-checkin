@@ -19,7 +19,7 @@ service/app/
 ├── db/
 │   ├── base.py                DeclarativeBase
 │   └── session.py             async engine、get_session 依赖（**事务边界在这里**）
-├── models/                    30 张表的 SQLAlchemy 模型（按域一文件）
+├── models/                    31 张表的 SQLAlchemy 模型（按域一文件）
 ├── schemas/                   Pydantic 出入参（按域一文件，字段名与 models 一致）
 ├── api/v1/                    薄路由：解析 → 校验 → 鉴权 → 调 service → 包装响应
 │   └── system.py study.py agent.py quiz.py resume.py stats.py eval.py uploads.py

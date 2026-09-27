@@ -1,0 +1,28 @@
+{
+  "id": "r000-skeleton",
+  "name": "r000-skeleton",
+  "title": "双服务骨架（R000）",
+  "description": "MONOREPO 骨架：service/ FastAPI 骨架（31 张表 Alembic 基线 + JWT 验签 + 统一信封）、web/ 15 个页面搬运与空态、infra/ nginx 分流与 compose；不含业务逻辑。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "Alex",
+  "assignee": "Alex",
+  "createdAt": "2026-09-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "req": "R000"
+  }
+}

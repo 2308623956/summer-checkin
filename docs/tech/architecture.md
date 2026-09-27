@@ -38,7 +38,7 @@ graph LR
 | FastAPI | 0.11x | HTTP 层（契约、依赖注入、OpenAPI 自动生成） |
 | Uvicorn | 最新稳定版 | ASGI 服务器（容器内单 worker，多实例横向扩展） |
 | SQLAlchemy | 2.0（async）+ `asyncpg` | ORM，**schema 唯一所有者** |
-| Alembic | 最新稳定版 | **唯一迁移工具**（30 张表的 DDL 由它管理） |
+| Alembic | 最新稳定版 | **唯一迁移工具**（31 张表的 DDL 由它管理） |
 | APScheduler | 最新稳定版 | 每日巡检调度（同时暴露手动触发接口） |
 | Pydantic | v2 | 请求/响应模型与校验 |
 | httpx / openai SDK 兼容客户端 | — | 模型池调用 |
@@ -83,14 +83,31 @@ sequenceDiagram
     U->>N: 请求页面 → web
     U->>N: 调用 /api/v1/*（浏览器自动带上 cookie）
     N->>S: 转发
-    S->>S: 验签（公钥/JWKS）+ 取 sub=user_id + 取 scope
+    S->>S: 验签（RS256 公钥）+ 取 sub=user_id
     S-->>U: 业务数据（按 user_id 隔离）
 ```
 
-- JWT 有效期短（建议 15 分钟），由 web 在会话有效期内续签；**service 不持有会话，也不需要访问认证表**。
+- JWT 有效期 15 分钟，由 web 在会话有效期内续签；**service 不持有会话，也不需要访问认证表**。
 - service 侧所有查询强制带 `user_id`；缺失或验签失败返回 `AUTH_REQUIRED`。
+
+**验签方式已落定（R000）**：
+
+| 项 | 决定 |
+|---|---|
+| 算法 | **RS256**（非对称，2048 位） |
+| 公钥分发 | **静态配置**：`SUMMER_JWT_PUBLIC_KEY` 直接放 PEM 文本，**不用 JWKS 端点** |
+| 签发方 | web 的 `/api/service-token`（`jose` 库），私钥只存在 web 的环境变量里 |
+| 令牌传递 | httpOnly cookie `summer_service_jwt`；`Authorization: Bearer` **优先于** cookie（供 CLI/CI 覆盖） |
+| 载荷 | 只放 `sub`（=`user.id`）、`iat`、`exp`、`iss` |
+
+**为什么不用 JWKS**：JWKS 的价值在于密钥轮换与多签发方。本项目只有一个签发方，
+两个进程（web 与 service）都在自己的环境变量里，静态公钥少一个网络依赖、少一处故障点，
+也少一个"启动时 JWKS 拉不到就全站 401"的隐患。密钥轮换时同步改两处 `SUMMER_JWT_PUBLIC_KEY` 即可。
+
+**为什么不用 HS256**：对称密钥会让 **service 具备签发能力**。签发权应只属于 web——
+service 一旦拿去签，任何能读 service 环境变量的人都能伪造任意用户的身份。
+
 - 服务间不互相调用（首期）：浏览器直接调 `/api/v1/*`，无需 BFF 转发，少一跳。
-- 具体签发方式以 Better Auth 文档的 JWT 插件为准，实现前先读其文档再定（不在本文档假设 API 形状）。
 
 ### 3.2 数据所有权
 
@@ -100,7 +117,7 @@ sequenceDiagram
 | ORM 模型 | SQLAlchemy 2.0（service） |
 | 认证表的读写 | web 用 Better Auth + **Kysely**（薄 SQL 客户端，不产生迁移） |
 | Prisma | **退场**：不搬 Prisma schema、不用 prisma migrate、不在 web 侧生成 Client |
-| 数据库实例 | **空地新建**：不接管任何已有生产库（旧的 ECS 环境已不可用），由 Alembic 初始迁移从零建出 30 张表；本地与服务端都用容器里的 PostgreSQL 16 + pgvector |
+| 数据库实例 | **空地新建**：不接管任何已有生产库（旧的 ECS 环境已不可用），由 Alembic 初始迁移从零建出 31 张表；本地与服务端都用容器里的 PostgreSQL 16 + pgvector |
 
 **约束**（写进 CI / review 清单）：
 
@@ -126,7 +143,7 @@ summer-checkin/
 │   │   ├── api/v1/                接口层（薄：解析 → 校验 → 鉴权 → 调服务）
 │   │   ├── core/                  config / security(JWT) / response / errors / logging
 │   │   ├── db/                    engine、session、基类
-│   │   ├── models/                SQLAlchemy 模型（30 张表）
+│   │   ├── models/                SQLAlchemy 模型（31 张表）
 │   │   ├── schemas/               Pydantic 出入参
 │   │   ├── services/              域服务：checkin, plan, agent, review, quiz, stats, eval
 │   │   └── agent/                 巡检运行时、模型池、记忆、RAG、通知
@@ -265,7 +282,7 @@ graph TB
 
 | 阶段 | 目标 | 完成标准 |
 |---|---|---|
-| W1 | `service/` 骨架 + Alembic 接管 30 张表 + nginx 分流 + JWT 验签 + `web/` 页面能跑 + 模型池**最小切片**（档位链/降级/记账）。**不含** agent 运行时、RAG 检索、记忆抽取、题库清洗（边界见 PRD 3.0.3） | 浏览器打开页面，`/api/v1/meta` 返回统一结构，端到端一条链路通；页面显示空态而不是白屏 |
+| W1 | `service/` 骨架 + Alembic 接管 31 张表 + nginx 分流 + JWT 验签 + `web/` 页面能跑 + 模型池**最小切片**（档位链/降级/记账）。**不含** agent 运行时、RAG 检索、记忆抽取、题库清洗（边界见 PRD 3.0.3） | 浏览器打开页面，`/api/v1/meta` 返回统一结构，端到端一条链路通；页面显示空态而不是白屏 |
 | W2 | 巡检 + 审批迁到 service；web 页面改读 `/api/v1/*` | 每日巡检自动跑，审批能建任务 |
 | W3 | 题库导入清洗 + 复盘（题库/简历）+ 统计 + 成本账本 | 一次完整闭环可用 |
 | 之后 | 回归面板、HTTPS 上线、演示材料 | 见 PRD 4.1 |

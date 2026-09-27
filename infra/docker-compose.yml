@@ -1,0 +1,81 @@
+# 部署形态：web / service / db / nginx 四个容器（architecture.md §6）。
+# 开发形态见 docker-compose.dev.yml —— 两者必须保持一致，晚做适配等于重做一遍。
+#
+# 迁移**不在这里隐式执行**：由 `infra/deploy.sh` 或一次性 job 显式跑
+# `alembic upgrade head`（service 侧 `SUMMER_AUTO_MIGRATE` 在生产固定为 false）。
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    # 某些 VM 内核下 Docker 默认 seccomp 会拦住 postgres initdb 的 fork（报 Cannot allocate memory）。
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-summer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须设置}
+      POSTGRES_DB: ${POSTGRES_DB:-summer_checkin}
+      SUMMER_PROD_DB: ${SUMMER_PROD_DB:-summer_checkin}
+      SUMMER_TEST_DB: ${SUMMER_TEST_DB:-summer_checkin_test}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # 只有数据卷为空时执行一次：建两个库 + 启用 pgvector。
+      - ./db/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-summer} -d ${POSTGRES_DB:-summer_checkin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [app-network]
+
+  service:
+    build:
+      context: ..
+      dockerfile: infra/service.Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      # 容器里连的是服务名，不是宿主机的 127.0.0.1。
+      SUMMER_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-summer}:${POSTGRES_PASSWORD}@db:5432/${SUMMER_PROD_DB:-summer_checkin}
+      # 迁移由部署脚本显式执行，容器启动不隐式跑。
+      SUMMER_AUTO_MIGRATE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [app-network]
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/web.Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-summer}:${POSTGRES_PASSWORD}@db:5432/${SUMMER_PROD_DB:-summer_checkin}
+      # 线上同域，走 nginx；web 自己不需要知道 service 地址。
+      SUMMER_SERVICE_URL: http://service:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [app-network]
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+      - service
+    networks: [app-network]
+
+volumes:
+  db_data:
+
+networks:
+  app-network:
+    driver: bridge

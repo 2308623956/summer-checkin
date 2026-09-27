@@ -12,38 +12,33 @@
 ```
 .trellis/spec/
 ├── README.md（本文）
-└── guides/                            与栈无关的思考工具，每次动代码前必读
-    ├── index.md                       导航 + 本项目分层图 + 改动前搜索习惯
-    ├── cross-layer-thinking-guide.md  数据怎么流、在哪变形、谁负责
-    └── pre-implementation-checklist.md 动手前检查项 + 反模式
+├── guides/                            与栈无关的思考工具，每次动代码前必读
+│   ├── index.md                       导航 + 本项目分层图 + 改动前搜索习惯
+│   ├── cross-layer-thinking-guide.md  数据怎么流、在哪变形、谁负责
+│   └── pre-implementation-checklist.md 动手前检查项 + 反模式
+├── service/index.md                   FastAPI 侧：分层、迁移纪律、三条硬规则
+└── web/index.md                       Next.js 侧：取数出口、认证链路、路由守卫
 ```
 
-**4 个文件。** 包级规约（`spec/web/`、`spec/service/`）**尚未建立**，原因见下。
+**6 个文件。**
 
 ---
 
-## 为什么没有 `spec/web/` 与 `spec/service/`
+## 包级规约的建立与维护
 
-Trellis 的包级 spec（`spec/<package>/<layer>/index.md`）要回答"这个包的代码该怎么写"。
-本项目此刻**还没有任何实现代码** —— `web/` 与 `service/` 目录都不存在。
+`spec/service/index.md` 与 `spec/web/index.md` 于 R000（双服务骨架）后建立，
+内容全部来自真实代码与实测结论，不含模板占位。
 
-在零代码的情况下写包级 spec，写出来的每条规则都无法指向真实文件，只能靠断言。
-`trellis-spec-bootstrap` 的完成标准明确要求 spec "describes the project as it exists now"。
-所以：
-
-| 包 | spec 状态 | 什么时候建 |
-|---|---|---|
-| `web`（Next.js 页面与认证） | 未建 | R000 完成后，按真实代码建立 |
-| `service`（FastAPI 领域服务） | 未建 | 同上 |
-
-建立时按 `trellis-spec-bootstrap` 做，并确保每个 `index.md` 含两个**逐字一致**的入口标题
-（`trellis-before-dev` 与 `trellis-check` 按字符串匹配找它们）：
+两个 `index.md` 都含两个**逐字一致**的入口标题（`trellis-before-dev` 与 `trellis-check`
+按字符串匹配找它们）：
 
 - `## Pre-Development Checklist`
 - `## Quality Check`
 
 > 注意：模板原先的 `Pre-Implementation Checklist` / `Pre-commit Checklist` 命名**匹配不上**，
-> 是新旧模板不一致导致的失效入口，建立新 spec 时不要再沿用。
+> 是新旧模板不一致导致的失效入口；上面这两个名字不要改。
+
+后续需求（R001 起）把新的坑按层补进对应文件；跨需求契约一旦变化，回写 `docs/tech/`，不要留在 spec 里。
 
 ---
 
@@ -53,10 +48,10 @@ Trellis 的包级 spec（`spec/<package>/<layer>/index.md`）要回答"这个包
 |---|---|
 | 服务边界、认证链路、数据所有权、目录结构、硬规则 | `docs/tech/architecture.md`（**动代码前必读**） |
 | 统一响应与错误码、幂等、分页、日志与追踪、时间与版本 | `docs/tech/architecture.md` §7 |
-| 30 张表的字段、关系、索引、迁移策略 | `docs/tech/data-model/` |
+| 31 张表的字段、关系、索引、迁移策略 | `docs/tech/data-model/` |
 | 39 个端点的出入参、鉴权、分页、限流；新增接口的 5 步 | `docs/tech/api/` |
 | service 模块划分、函数清单、agent 运行时、事务与幂等 | `docs/tech/backend.md` |
-| 17 个路由、逐页五种状态、组件复用、令牌传递、错误码映射 | `docs/tech/frontend.md` |
+| 页面路由、逐页五种状态、组件复用、令牌传递、错误码映射 | `docs/tech/frontend.md` |
 | 模型池、embedding 与 pgvector、OSS、环境变量、Compose、CI/CD | `docs/tech/integrations.md` |
 | 每条技术决策的背景、被否方案、代价 | `docs/tech/decisions/` |
 
@@ -102,7 +97,7 @@ Trellis 的包级 spec（`spec/<package>/<layer>/index.md`）要回答"这个包
 
 - 修完非平凡 bug 后，把教训补进
   `guides/pre-implementation-checklist.md` 的"经验教训"表（症状 → 原因 → 怎么避免）。
-- 本项目特有的坑，等 `spec/web/`、`spec/service/` 建立后按层归位。
-  当前已核实的 service 侧缺陷记录在 `docs/tech/backend.md` §3.4（审批未生效、决策状态自相矛盾）
+- 本项目特有的坑按层归位到 `service/index.md` 或 `web/index.md` 的"常见错误"表。
+  service 侧已核实的参考实现缺陷记录在 `docs/tech/backend.md` §3.4（审批未生效、决策状态自相矛盾）
   与 `docs/tech/integrations.md` §3（embedding 维度、rerank 端点）。
 - 跨需求契约一旦变化，回写 `docs/tech/`，不要留在 spec 里。

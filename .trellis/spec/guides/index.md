@@ -120,8 +120,8 @@ PostgreSQL 16 + pgvector（schema 由 Alembic 唯一拥有）
 
 1. 如果是**通用思考模式** → 加进现有指南
 2. 如果它导致了 bug → 加进相关指南的"经验教训"一节
-3. 如果是**本项目特有的坑** → 等 R000 之后建立 `spec/web/`、`spec/service/` 时按层归位
-   （当前 service 侧已核实的坑记录在 `docs/tech/backend.md` §3.4 与 `docs/tech/integrations.md` §3）
+3. 如果是**本项目特有的坑** → 按层加进 `spec/service/index.md` 或 `spec/web/index.md` 的"常见错误"表
+   （参考实现里已核实的坑记录在 `docs/tech/backend.md` §3.4 与 `docs/tech/integrations.md` §3）
 
 ---
 

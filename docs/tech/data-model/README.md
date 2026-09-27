@@ -1,18 +1,24 @@
 # 数据模型（总览）
 
-> 30 张表（27 张沿用 + 3 张新增），**全部由 Alembic 拥有**：SQLAlchemy 2.0 模型定义在 `service/app/models/`，DDL 只从 `service/alembic/` 出来。
+> 31 张表（27 张沿用 + 4 张新增），**全部由 Alembic 拥有**：SQLAlchemy 2.0 模型定义在 `service/app/models/`，DDL 只从 `service/alembic/` 出来。
 > 参考实现在 `summer-checkin-master/prisma/schema.prisma`（Prisma），本目录是它的重组与规范化版本——**字段名按本文档为准**。
 
 ## 1. 分册索引
 
 | 分册 | 表 | 用途 |
 |---|---|---|
-| `01-account.md` | `user`、`session`、`account`、`avatarchange` | 账号与会话（web 侧读写） |
+| `01-account.md` | `user`、`session`、`account`、`verification`、`avatarchange` | 账号与会话（web 侧读写） |
 | `02-study.md` | `plan`、`plantask`、`todo`、`checkin`、`studyrecord`、`plantemplate` | 学习计划与打卡 |
 | `03-knowledge.md` | `document`、`documentchunk`、`knowledgedoc`、`documenttemplate` | 文档与知识库（向量检索） |
 | `04-agent.md` | `agentrun`、`agentstep`、`agentapproval`、`agenttoolcall`、`agentdecision`、`agentschedule`、`usermemory`、`aihistory`、`notification` | agent 运行、审批、记忆、通知 |
 | `05-conversation.md` | `conversation`、`conversationmessage`、`chatmessage` | 复盘会话与聊天室 |
 | `06-usage-and-eval.md` | `tokenusage` + 新增 `evalfixture`、`evalrun`、`evalresult` | 成本账本与回归门禁 |
+
+**31 = 27 + 4**：新增的是 `verification`（Better Auth 的邮箱验证表）与 `evalfixture` / `evalrun` / `evalresult`（回归门禁）。
+
+> **关于 Better Auth 的表**：`user` / `session` / `account` / `verification` 四张表是 Better Auth 的运行前提，
+> 但它们的 **DDL 仍由 Alembic 拥有**（不用 `better-auth migrate`）——两个 DDL 来源必然漂移。
+> 字段名差异通过 Better Auth 的字段映射配置对齐（见 `01-account.md`）。
 
 ## 2. 命名与类型约定
 
@@ -95,11 +101,24 @@ erDiagram
 
 ## 6. Alembic 迁移策略
 
-- **空地新建**：不接管任何已有库。初始迁移 `0001_initial` 从零建出 30 张表、扩展、索引。
+- **空地新建**：不接管任何已有库。初始迁移 `0001_initial` 从零建出 31 张表、扩展、索引。
 - 迁移顺序：`CREATE EXTENSION vector` → 业务表 → `vector` 列 → HNSW 索引（`CREATE INDEX ... USING hnsw` 在数据为空时秒级完成）。
 - 生成方式：手写模型后 `alembic revision --autogenerate`，**必须人工审阅**（自动生成认不出 `vector` 类型与 HNSW 索引，需要 `from sqlalchemy.dialects.postgresql import ...` + `op.execute("CREATE INDEX ... USING hnsw ...")`）。
-- 守卫：CI 跑 `alembic upgrade head`（空库）→ `alembic check`（模型与库无漂移）→ 再跑一次 `downgrade base`（迁移可逆，至少到建表这一层）。
+- 守卫：CI 跑 `alembic upgrade head`（空库）→ `alembic check`（模型与库无漂移）→ `downgrade base` → 再 `upgrade head`（迁移可逆，至少到建表这一层）。
 - 环境变量 `SUMMER_DATABASE_URL`；迁移**不在容器启动时隐式执行**，由部署脚本显式跑。
+
+**autogenerate 的两条能力边界**（R000 实测确认，误判代价很高）：
+
+| 边界 | 后果 | 应对 |
+|---|---|---|
+| **表/列改名检测不出来** | 渲染成 `drop_table` + `create_table`，照执行等于删数据 | 改名一律手写 `op.alter_column(..., new_column_name=...)` |
+| **`compare_server_default` 默认关闭** | 改列默认值不会被 `alembic check` 发现 | 默认值变更需人工确认；必要时在 `env.py` 打开该项 |
+
+另外 `CREATE EXTENSION vector`、`vector(1024)` 列、`USING hnsw` 索引三处 autogenerate 认不出来，必须手写在迁移里（`0001_initial` 就是这么来的）。
+
+**测试库护栏**：`downgrade` 前必须确认库名以 `_test` 结尾（`app/db/guard.py`），否则拒绝执行。
+开发与生产库名都不带此后缀，所以"手滑 downgrade 掉生产库"在代码层面被挡住。
+例外通道 `SUMMER_ALLOW_NON_TEST_DB=1` 仅用于演练。
 
 ## 7. 数据保留与清理
 
@@ -117,3 +136,4 @@ erDiagram
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-09-25 | v0.1 | 首版：30 张表分册、命名与类型约定、ER 图、向量索引、迁移与保留策略 |
+| 2026-09-27 | v0.2 | R000 落地：30 → **31 张表**（补 `verification`）、autogenerate 两条能力边界、测试库护栏 |

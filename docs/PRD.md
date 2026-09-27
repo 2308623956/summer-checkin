@@ -169,7 +169,7 @@
 
 | 需求ID | 模块 | 需求描述 | 初步拆解（开工前的起点，不是设计） | 优先级 | 状态 | 备注 |
 |---|---|---|---|---|---|---|
-| **R000** | **双服务骨架** | **`service/`（FastAPI + SQLAlchemy + Alembic 从零建 30 张表 + JWT 验签 + 统一响应与错误 + CI）、`web/`（页面与登录跑通、一条真实链路调通）、`infra/`（两个 Dockerfile + compose + nginx 分流）；不含业务逻辑** | 仓库结构、两个 Dockerfile、nginx 分流、JWT 传递、30 张表迁移基线、模型池最小切片 | **高** | 规划中 | 一切需求的前提 |
+| **R000** | **双服务骨架** | **`service/`（FastAPI + SQLAlchemy + Alembic 从零建 31 张表 + JWT 验签 + 统一响应与错误 + CI）、`web/`（页面与登录跑通、一条真实链路调通）、`infra/`（两个 Dockerfile + compose + nginx 分流）；不含业务逻辑** | 仓库结构、两个 Dockerfile、nginx 分流、JWT 传递、31 张表迁移基线、模型池最小切片 | **高** | 开发中 | 一切需求的前提 |
 | R001 | 审批边界 | 写库类 agent 动作必须先落审批，确认后在事务内执行；通知类自动执行 | 运行时四步重写、风险分级、审批条件更新、通知出口、`execute_action` 调用点守卫 | 高 | 规划中 | 修复现状缺陷 |
 | R002 | 幂等 | 审批与工具执行支持幂等，重复触发不产生重复副作用 | 工具幂等键、巡检 `(user_id, 日期, 动作类型)`、并发批准 | 高 | 规划中 | 复用 `idempotency_key` |
 | R003 | 每日建议 | 建议必须带依据，一天 ≤ 3 条（写库类 ≤ 1 条），含禁用话术校验与规则降级 | 建议依据结构、条数上限、禁用话术校验、规则降级 | 高 | 规划中 | |
@@ -193,14 +193,14 @@
 |---|---|---|---|
 | 页面 | 15 个 page.tsx，功能完整 | 6 个主路由 + 2 个新页面（复盘、回归面板）能渲染空态 | 新增 2 页，其余改造入口与文案 |
 | 接口 | 28 个 route.ts，与页面同进程、多为直连 Prisma 的附带接口 | 全部业务接口由 `service/`（FastAPI）提供 `/api/v1/*`，web 只保留认证路由 | **需整体迁到 Python 服务（R000 起）** |
-| 数据模型 | 27 张表定义在 `prisma/schema.prisma` 中 | 30 张表由 SQLAlchemy 模型 + Alembic 迁移接管（Prisma 退场） | 需重建模型与迁移基线 |
+| 数据模型 | 27 张表定义在 `prisma/schema.prisma` 中 | **31 张表**由 SQLAlchemy 模型 + Alembic 迁移接管（Prisma 退场） | 需重建模型与迁移基线 |
 | agent | Observe→Analyze→Plan→Execute 已落库，有审批与决策表 | 审批按风险分级、建议带依据、成本归因、回归门禁 | 现状 `CREATE_TASK` 直接写库，审批未真正生效 |
 | 学习记录 | 打卡有 content/hours/subject/mood | 增加"今日学了什么 + 主题"，与题库主题对齐 | 字段复用，语义扩展 |
 | 复盘能力 | 无 | 题库复盘 + 简历复盘 + 弱项曲线 | **全部新增** |
 | 可观测 | 有 `tokenusage`（无 run 归因），步骤有起止时间 | 成本按 run 归因、P95 延迟可查、回归可对比 | 加 1 列 + 1 张对比表族 |
 | 聊天室与 3D 岛 | 聊天室常驻悬浮入口（`top-nav.tsx` 渲染 `<ChatRoom />`）+ WS sidecar；3D 岛在首页 | 聊天室隐藏入口（代码保留），3D 岛保留 | 各 1 处改动，不投入新功能 |
 | 部署 | Docker + nginx + 阿里云 ECS，HTTP | HTTPS + 域名 | roadmap 旧事，本期必做 |
-| 版本管理 | **无 git 仓库** | `git init`，现状为首个快照，按需求 ID 提交 | 需补，否则无历史可展示 |
+| 版本管理 | **无 git 仓库** | 仓库已 `git init`（`master`），按需求 ID 提交 | 已补，工程基线提交见 R000 |
 
 ## 1.8 项目来源与迁移策略（本期第一件事）
 
@@ -223,12 +223,12 @@
 | 类别 | 内容 | 处置 | 阶段 |
 |---|---|---|---|
 | **搬运（改调用方式）** | UI 组件（`components/ui/*`）、统计与热力图组件、Markdown 渲染、页面与交互、`scripts/extract_pdf.py` / `extract_docx.py`、nginx 与 Dockerfile 参考 | 复制到 `web/`，把数据请求从"直连数据库"改为"调 `/api/v1/*`" | **R000 全搬**（页面可打开、空态可渲染） |
-| **重建（数据基线）** | 原 27 张表定义 → 30 张 SQLAlchemy 模型 + Alembic 首个迁移（含 `vector(1024)` 列与 HNSW 索引） | 在 `service/` 重建，不接管旧库 | **R000** |
+| **重建（数据基线）** | 原 27 张表定义 → 31 张 SQLAlchemy 模型 + Alembic 首个迁移（含 `vector(1024)` 列与 HNSW 索引） | 在 `service/` 重建，不接管旧库 | **R000** |
 | **重写（Python 服务，按需求推进）** | agent 运行时（参考项目 `lib/agent/runtime.ts` 886 行）、模型池、长期记忆、通知、RAG 调用与题库清洗、token 记账、全部业务接口 | 在 `service/` 用 FastAPI + SQLAlchemy 重写；保留"写库动作必须审批"的边界（原实现 `CREATE_TASK` 直接写库是已知缺陷） | **R000 只做模型池最小切片 + 接口骨架**；运行时 R001–R003；RAG 与 embedding R005；记忆 R006–R007 |
 | **改造（后续需求）** | 打卡字段与主题、巡检建议规则、审批风险分级、成本归因、统计视图 | R001–R009 | 后续需求 |
 | **不搬运** | Prisma（schema 与迁移）、聊天室页面与 WS sidecar（`server/`）、TS 版 agent 运行时与模型池 | 见 `tech/decisions/ADR-001-domain-service.md` 与 `ADR-002-no-chatroom.md` | — |
 
-**迁移验收**：`summer-checkin/` 已 `git init` 且首个提交为文档与工程基线；`web/` 与 `service/` 各自检查全绿（`npm run check` / `ruff check` + `pytest`）；`docker compose up` 能在空环境起出四个容器并经 nginx 访问；浏览器能打开页面并完成登录；`GET /api/v1/meta` 返回统一结构；`alembic upgrade head` 能在空库建出 30 张表。
+**迁移验收**：仓库已就绪且工程基线提交在案；`web/` 与 `service/` 各自检查全绿（`npm run check` / `ruff check` + `pytest`）；`docker compose up` 能在空环境起出四个容器并经 nginx 访问；浏览器能打开页面并完成登录；`GET /api/v1/meta` 返回统一结构；`alembic upgrade head` 能在空库建出 31 张业务表。
 
 ---
 
@@ -410,22 +410,22 @@ graph LR
 
 | 交付物 | 内容 | 验收方式 |
 |---|---|---|
-| 仓库骨架 | `git init`（monorepo）：`web/`、`service/`、`infra/`、`docs/` | 首个提交为文档与工程基线；两端各自检查全绿 |
-| 后端骨架 | `service/`：FastAPI 应用装配、`app/core`（config / JWT 验签 / response / errors / logging）、`app/api/v1`（薄接口层）、`app/models`（30 张表）、`app/services`（按域建文件，先返回空数据） | `ruff check` + `pytest` 全绿；`/api/v1/healthz`、`/api/v1/meta` 返回统一结构 |
-| 数据基线 | SQLAlchemy 模型 + Alembic 初始迁移（含 pgvector 扩展与 HNSW 索引） | `alembic upgrade head` 在空库建出 30 张表；`alembic check` 无漂移 |
+| 仓库骨架 | monorepo（仓库已存在，`git init` 无需再做）：`web/`、`service/`、`infra/`、`docs/` | 工程基线提交；两端各自检查全绿 |
+| 后端骨架 | `service/`：FastAPI 应用装配、`app/core`（config / JWT 验签 / response / errors / logging）、`app/api/v1`（薄接口层）、`app/models`（**31 张表**）、`app/services`（按域建文件，先返回空数据） | `ruff check` + `pytest` 全绿；`/api/v1/healthz`、`/api/v1/meta` 返回统一结构 |
+| 数据基线 | SQLAlchemy 模型 + Alembic 初始迁移（含 pgvector 扩展与 HNSW 索引） | `alembic upgrade head` 在空库建出 **31 张业务表**（+ `alembic_version`）；`alembic check` 无漂移 |
 | 认证打通 | Better Auth 留在 `web/` 并签发短期 JWT；`service/` 验签取 `user_id` | 未登录调 `/api/v1/*` 返回 `AUTH_REQUIRED`；登录后只能拿到自己的数据 |
-| 前端接入 | 从 master 搬运**全部 17 个页面与组件**到 `web/`，数据请求改为调 `/api/v1/*`（清单见 `tech/frontend.md` §10） | 17 个页面都能打开、无控制台报错；其中 `/`、`/checkin`、`/dashboard`、`/plans`、`/docs`、`/agent`、`/review`（6 主路由 + 复盘页）必须走通接口取数与空态；详情页在空库下走 `NOT_FOUND` 空态 |
+| 前端接入 | `web/` 建出参考工程的 **15 个页面**（不含 `/review` 与 `/agent/eval`，那两页等对应需求），数据请求一律走 `/api/v1/*`（清单见 `tech/frontend.md` §10） | 15 个页面都能打开、无控制台报错；`/`、`/checkin`、`/dashboard`、`/plans`、`/docs`、`/agent`、`/statistics`、`/profile` 走通接口取数与空态 |
 | 横切地基（模型池切片） | `service/app/llm/`：档位链读取、失败降级、限流冷却、`usage` 记账（`tokenusage`）；`/meta` 暴露额度 | 单测覆盖"降级 + 记账"（用假 client，不依赖真实 key）；`/meta` 返回配置的限额 |
-| 容器化 | `web/Dockerfile`、`service/Dockerfile`、`infra/docker-compose.yml`（web + service + db + nginx 四容器）、`infra/docker-compose.dev.yml`（只起 db） | `docker compose up` 一条命令起全栈并访问；空环境可复现 |
+| 容器化 | `infra/web.Dockerfile`、`infra/service.Dockerfile`、`infra/docker-compose.yml`（web + service + db + nginx 四容器）、`infra/docker-compose.dev.yml`（只起 db） | `docker compose up` 一条命令起全栈并访问；空环境可复现 |
 | 编排 | `infra/nginx/*.conf` 路径分流（`/` 与 `/api/auth/*` → web，`/api/v1/*` → service） | 经 nginx 访问，页面与接口都通 |
-| CI | 两条流水线：web（typecheck + lint + test）、service（ruff + pytest + `alembic upgrade head` 冒烟） | CI 全绿 |
-| 文档 | `docs/tech/architecture.md`（已写）+ 一份"新增一个接口的 5 步" | 按文档新增一个示例接口可成功 |
+| CI | `web-check`、`service-check`（含迁移离线渲染校验）、`migration-drift`（真库 `alembic check`）、`docker-build` | CI 全绿 |
+| 文档 | `docs/tech/architecture.md`（已写）+ 一份"新增一个接口的 5 步" | 按文档新增一个示例接口可成功（`GET /api/v1/example` 即是该示例） |
 
 **3.0.2 边缘 Case**
 
 - 搬运过来的页面里仍有直连数据库的旧代码 → 逐个销项：数据请求一律改调 `/api/v1/*`，本期结束时 web 侧不应存在业务表访问。
 - 服务骨架返回空数据 → 前端必须能处理空态，不得白屏。
-- 数据库**空地新建**（不接管任何已有库，旧 ECS 环境已不可用）→ Alembic 初始迁移必须能在空库一次性建出 30 张表，并在 CI 冒烟验证；不接受"手工调过库再提交"的状态。
+- 数据库**空地新建**（不接管任何已有库，旧 ECS 环境已不可用）→ Alembic 初始迁移必须能在空库一次性建出 **31 张业务表**，并在 CI 冒烟验证；不接受"手工调过库再提交"的状态。
 - 环境变量缺失或 JWT 公钥未配 → 启动时明确报错并拒绝启动，**不允许静默降级成无鉴权**。
 - 两个服务要分别启动 → 提供 `infra/docker-compose.yml` 起依赖（db）与一份"本地怎么跑起来"的说明。
 
@@ -639,7 +639,7 @@ graph LR
 
 ## 3.7 数据模型（字段级）
 
-> PRD 只回答"需要什么数据"；**字段级定义以 `tech/data-model/` 为准**（30 张表分 6 册，含全部字段、索引、向量与迁移策略）。命名规范（snake_case 列名、UUIDv7 主键、timestamptz）见 `tech/decisions/ADR-003-naming-and-keys.md`。
+> PRD 只回答"需要什么数据"；**字段级定义以 `tech/data-model/` 为准**（31 张表分 6 册，含全部字段、索引、向量与迁移策略）。命名规范（snake_case 列名、UUIDv7 主键、timestamptz）见 `tech/decisions/ADR-003-naming-and-keys.md`。
 
 **沿用 27 张表**：表结构不动，只改语义用法——题库原文与简历进 `knowledgedoc` / `documentchunk`，复盘用 `conversation` / `conversationmessage`，弱项档案用 `usermemory`，巡检轨迹用 `agentrun` / `agentstep` / `agentapproval` / `agentdecision` / `agenttoolcall`。**不新增**题库、复盘、弱项、成本台账的实体。
 
@@ -748,7 +748,7 @@ graph LR
 
 | 需求 | 验收标准（可测） |
 |---|---|
-| R000 | `web/` 与 `service/` 各自检查全绿（`npm run check` / `ruff check` + `pytest`）；页面可打开并完成登录；`GET /api/v1/meta` 返回统一结构；`alembic upgrade head` 在空库建出 30 张表；未经 nginx 直连端口也能复现同样结果 |
+| R000 | `web/` 与 `service/` 各自检查全绿（`npm run check` / `ruff check` + `pytest`）；页面可打开并完成登录；`GET /api/v1/meta` 返回统一结构；`alembic upgrade head` 在空库建出 31 张业务表；未经 nginx 直连端口也能复现同样结果 |
 | R001 | 构造一条含 `CREATE_TASK` 的巡检：未审批时 `plantask` 无新增；批准后新增 1 行；拒绝后无新增且写 `feedback` |
 | R002 | 同一审批并发提交 2 次 → 只执行 1 次，第二次返回 `CONFLICT`；同 `Idempotency-Key` 的工具调用只落 1 行 |
 | R003 | 抽样 20 条建议：100% 含 `reason` 与非空 `action`；禁用话术 0 命中；LLM 关闭时仍能产出规则建议 |
@@ -780,7 +780,7 @@ graph LR
 | 阶段 | 内容 | 交付物 | 日期 |
 |---|---|---|---|
 | 需求评审 | 本文档评审定稿 | PRD 3.0.0 | D0 |
-| **W1 骨架** | **R000：`service/` 骨架 + Alembic 从零建 30 张表 + JWT 验签 + `web/` 页面与登录跑通 + Docker 化（两个 Dockerfile + compose + nginx 分流）+ `git init`** | `docker compose up` 起全栈；端到端一条真实链路（`/api/v1/meta` + 统计概览） | D1 ~ D7 |
+| **W1 骨架** | **R000：`service/` 骨架 + Alembic 从零建 31 张表 + JWT 验签 + `web/` 页面与登录跑通 + Docker 化（两个 Dockerfile + compose + nginx 分流）** | `docker compose up` 起全栈；端到端一条真实链路（`/api/v1/meta` + 统计概览） | D1 ~ D7 |
 | W2 巡检 | R001 / R002 / R003 / R009：审批边界、幂等、建议依据与降级、成本归因（迁到 service） | 每日巡检自动跑、审批能建任务 | D8 ~ D14 |
 | W3 复盘 | R004 / R005 / R006 / R007：题库导入清洗、题库复盘、简历复盘、弱项档案 | 学习—复盘闭环可用 | D15 ~ D21 |
 | 收尾一 | R008：统计与成本页面 | 审查视图 | D22 ~ D23 |
@@ -852,7 +852,7 @@ graph LR
 
 1. **演示脚本（60 秒）**：打开智能体页 → 展示今天的建议与依据 → 点"批准"，展示写库动作在审批后才发生 → 打开成本与延迟 → 打开回归面板，展示"改 prompt 后哪一项退化、被 CI 拦住"。
 2. **简历表述（数字待真实使用后填）**
-   - 独立设计并实现 Summer Checkin 学习与复盘平台：**FastAPI 领域服务**（SQLAlchemy 2.0 + Alembic + APScheduler + PostgreSQL/pgvector）与 Next.js 前端**分离部署**，nginx 同域分流、BFF 短期 JWT 认证；主动巡检 agent + **风险分级人工审批**执行链，30 张表，累计 N 次真实巡检、M 次复盘；
+   - 独立设计并实现 Summer Checkin 学习与复盘平台：**FastAPI 领域服务**（SQLAlchemy 2.0 + Alembic + APScheduler + PostgreSQL/pgvector）与 Next.js 前端**分离部署**，nginx 同域分流、BFF 短期 JWT 认证；主动巡检 agent + **风险分级人工审批**执行链，31 张表，累计 N 次真实巡检、M 次复盘；
    - 成本与延迟可观测：`tokenusage` 按 run 归因，单次巡检成本 ¥x、P95 延迟 xx s；
    - **Agent 行为回归门禁**：真实 trace 固化为 N 条 fixture，prompt / 模型变更后自动重放对比，CI 拦截 N 次退化。
 3. **面试必答**：见附录 A。

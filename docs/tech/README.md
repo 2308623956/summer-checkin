@@ -23,7 +23,7 @@ tech/README.md（本文，先看追溯表知道自己要动的部分牵涉哪些
 | 文档 | 写什么 | 不写什么 |
 |---|---|---|
 | `architecture.md` | 服务边界与判据、认证链路、数据所有权、目录、硬规则、关键流程、部署拓扑、跨领域约定 | 具体表字段、具体接口出入参 |
-| `data-model/` | 30 张表按域分 6 册的全部字段、类型、索引、关系、向量、Alembic 迁移与保留策略；命名与主键规范 | 接口行为、页面表现 |
+| `data-model/` | **31 张表**按域分 6 册的全部字段、类型、索引、关系、向量、Alembic 迁移与保留策略；命名与主键规范 | 接口行为、页面表现 |
 | `api/` | 接口总则（鉴权/响应与错误码/幂等/分页/流式/限流）与 39 个端点的出入参；P0 全 schema、P1 只写职责 | 表结构细节、页面布局 |
 | `backend.md` | service 的模块划分、函数签名、事务与幂等、agent 运行时、错误与日志 | 接口清单（在 `api/`）、页面 |
 | `frontend.md` | web 的路由表、页面职责与交互状态、组件复用、登录与令牌、文案规范 | 后端实现、表结构 |
@@ -37,7 +37,7 @@ tech/README.md（本文，先看追溯表知道自己要动的部分牵涉哪些
 
 | 需求 | 数据模型 | 接口（service） | 页面（web） | 验收 / 测试 |
 |---|---|---|---|---|
-| R000 工程骨架 | Alembic 从零建 30 张表 | `GET /healthz`、`GET /meta` | 页面与登录跑通，一条真实链路调通 | 两端 `check` 全绿；`docker compose up` 起全栈；`/api/v1/meta` 返回统一结构 |
+| R000 工程骨架 | Alembic 从零建 31 张表 | `GET /healthz`、`GET /meta` | 15 个页面与登录跑通，一条真实链路调通 | 两端 `check` 全绿；`docker compose up` 起全栈；`/api/v1/meta` 返回统一结构 |
 | R001 审批边界 | `agentapproval`、`agentdecision`、`plantask` | `POST /runs/{id}/approvals/{aid}/decide` | 智能体页审批卡 | 未审批时 `plantask` 无新增行 |
 | R002 幂等 | `agentapproval.status`、`agenttoolcall.idempotency_key` | 同上 + `Idempotency-Key` 头 | — | 并发两次审批只执行一次 |
 | R003 每日建议 | `agentrun`（+`model`/`prompt_version`）、`agentstep` | `POST /cron/daily`（或 APScheduler） | 通知铃 + 智能体页时间线 | 抽样 20 条建议 100% 含 `reason` |
@@ -55,7 +55,7 @@ tech/README.md（本文，先看追溯表知道自己要动的部分牵涉哪些
 
 | # | 事项 | 决定 | 依据 |
 |---|---|---|---|
-| 1 | 数据库来源 | **空地新建**：不接管任何已有库（旧 ECS 环境已不可用），Alembic 初始迁移从零建 30 张表；本地与服务端都用容器里的 PostgreSQL 16 + pgvector | 没有历史数据要保，基线可以一次做干净 |
+| 1 | 数据库来源 | **空地新建**：不接管任何已有库（旧 ECS 环境已不可用），Alembic 初始迁移从零建 31 张表；本地与服务端都用容器里的 PostgreSQL 16 + pgvector | 没有历史数据要保，基线可以一次做干净 |
 | 2 | OSS 预签名归属 | **搬到 service**：密钥只留在后端服务；题库/资料这类小文件直接 POST 给 service 解析入库，不绕 OSS | 与"web 只做页面与认证"一致 |
 | 3 | 回归面板 `eval` 跑在哪 | **service 内的 CLI + CI 调用**：本地可复现，CI 用它做门禁 | 回归的价值在于"随时能重跑" |
 | 4 | 本地开发与部署形态 | **Docker 从 R000 起就要能跑**：`docker-compose.yml` 四容器（web / service / db / nginx）用于部署，`docker-compose.dev.yml` 只起 db、两端本地热重载 | 部署形态必须和开发形态一致 |

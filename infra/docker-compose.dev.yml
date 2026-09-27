@@ -1,0 +1,32 @@
+# 开发形态：只起数据库，web 与 service 在宿主机上热重载。
+#
+# 为什么只起 db：Next 与 uvicorn 的本地热重载体验比容器里好得多，
+# 而"数据库跑在容器里"这条（本地与服务器同一镜像）必须一致，所以 db 走容器。
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-summer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-summer_checkin_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-summer_checkin}
+      SUMMER_PROD_DB: ${SUMMER_PROD_DB:-summer_checkin}
+      SUMMER_TEST_DB: ${SUMMER_TEST_DB:-summer_checkin_test}
+    volumes:
+      - db_dev_data:/var/lib/postgresql/data
+      - ./db/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    ports:
+      # 只绑本机：开发库不该暴露在局域网上。
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-summer} -d ${POSTGRES_DB:-summer_checkin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  db_dev_data:

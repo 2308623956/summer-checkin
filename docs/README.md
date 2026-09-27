@@ -14,7 +14,7 @@ docs/
     ├── backend.md          后端（service / FastAPI）：模块划分、函数清单、事务与幂等、agent 运行时
     ├── frontend.md         前端（web / Next.js）：路由表、页面职责与状态、组件复用、登录与令牌
     ├── integrations.md     第三方集成：模型池 / OSS / pgvector / 部署 / 环境变量
-    ├── data-model/         数据模型（按域分册，含全部 30 张表字段与 Alembic 迁移）
+    ├── data-model/         数据模型（按域分册，含全部 31 张表字段与 Alembic 迁移）
     ├── api/                接口契约（总则 + 按模块分册，全部由 service 提供）
     └── decisions/          技术决策记录（ADR，一条一文件）
 ```
@@ -29,7 +29,7 @@ docs/
 |---|---|---|
 | `PRD.md` | 目标用户、痛点、功能范围、优先级、验收标准、排期；1.6 每个需求的初步拆解，2.6 点明有哪些子系统 | 决定"要不要做、做到什么程度" |
 | `tech/architecture.md` | 两个服务的边界与判据、认证、数据所有权、目录、硬规则、部署拓扑 | 动手写任何代码之前 |
-| `tech/data-model/` | 30 张表的字段与关系、Alembic 迁移、保留与清理 | 改数据结构、写查询、做统计 |
+| `tech/data-model/` | 31 张表的字段与关系、Alembic 迁移、保留与清理 | 改数据结构、写查询、做统计 |
 | `tech/api/` | 接口总则、每个接口的职责与出入参 | 写前端调用或后端实现 |
 | `tech/backend.md` | service 的模块与函数、事务与幂等、agent 运行时 | 写后端逻辑 |
 | `tech/frontend.md` | 路由、页面职责、交互状态、组件复用、令牌传递 | 写页面与组件 |
@@ -64,15 +64,17 @@ docs/
 
 | 文档 | 状态 |
 |---|---|
-| `PRD.md` | v3.1.1（1.6 需求表含逐条初步拆解；R000 边界 + 2.6 子系统与技术路线） |
-| `.trellis/tasks/` | 需求级文档已就绪；**13 个需求的 Trellis 任务待逐个创建（R000 是下一个）** |
+| `PRD.md` | v3.1.1（1.6 需求表含逐条初步拆解；R000 边界 + 2.6 子系统与技术路线）；R000 相关摘要已按实现回改（31 张表 / 15 个页面） |
+| `.trellis/tasks/` | R000 任务进行中（`09-27-r000-skeleton`）；其余需求的 Trellis 任务待逐个创建 |
 | `tech/README.md` | 已写 |
-| `tech/architecture.md` | 已写（v0.2：双服务架构） |
+| `tech/architecture.md` | 已写（v0.2：双服务架构；§3.1 已补 R000 确定的 JWT 验签方式） |
 | `tech/decisions/` | 已写：ADR-001 后端服务化、ADR-002 聊天室不迁移、ADR-003 命名与主键规范 |
-| `tech/data-model/` | 已写（README 总览 + 6 册，30 张表全字段） |
-| `tech/api/` | 已写（总则 + 6 册，39 个端点：29 个 P0 全 schema / 10 个 P1 只写职责） |
+| `tech/data-model/` | 已写（README 总览 + 6 册，**31 张表**全字段；已补 autogenerate 能力边界与测试库护栏） |
+| `tech/api/` | 已写（总则 + 6 册，39 个端点：29 个 P0 全 schema / 10 个 P1 只写职责；§9 补本项目实测的坑与可抄样例） |
 | `tech/backend.md` | 已写（模块划分、函数清单、运行时四步与降级、事务与幂等、错误与日志） |
-| `tech/frontend.md` | 已写（17 个路由表、逐页五态、组件复用、令牌传递、fetcher 与错误码映射） |
-| `tech/integrations.md` | 已写（模型池与成本、向量链路、OSS、环境变量、Compose、CI/CD、灰度回滚） |
+| `tech/frontend.md` | 已写（路由表、逐页五态、组件复用、令牌传递、fetcher 与错误码映射；`middleware.ts` → `proxy.ts` 已改） |
+| `tech/integrations.md` | 已写（模型池与成本、向量链路、OSS、环境变量、Compose、CI/CD、灰度回滚；`pnpm` → `npm`、补迁移策略） |
+| `.trellis/spec/` | 已写（`guides/` + 包级 `web/index.md`、`service/index.md`，按 R000 真实代码建立） |
 
-写作顺序：~~data-model~~ → ~~api~~ → ~~backend~~ → ~~frontend~~ → ~~integrations~~。**技术文档五册已齐**。
+写作顺序：~~data-model~~ → ~~api~~ → ~~backend~~ → ~~frontend~~ → ~~integrations~~。**技术文档五册已齐**；
+R000 落地后按"文档与代码不一致就当场改"的规则回写了一轮（见各文档变更记录）。
