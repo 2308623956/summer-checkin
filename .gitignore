@@ -8,6 +8,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+# tsc 的增量构建缓存：几百 KB 的机器生成产物，每次构建都在变。
+*.tsbuildinfo
 
 # 环境与密钥：绝不进版本库
 .env

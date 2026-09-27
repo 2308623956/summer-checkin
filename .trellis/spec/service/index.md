@@ -116,6 +116,7 @@ async def list_checkins(user: Annotated[CurrentUser, Depends(get_current_user)])
 | 症状 | 原因 | 怎么做 |
 |---|---|---|
 | 启动报 `ValidationError`，指向缺失字段 | 环境变量没设，或设在了 `Settings` 实例化之后 | 在导入 app 之前设好（测试里看 `conftest.py`） |
+| 明明填了根目录 `.env` 却报字段缺失 | `Settings.env_file=".env"` 是**相对当前工作目录**的；从 `service/` 启动只会读 `service/.env` | 变量放 `service/.env`；根目录 `.env` 只给生产 compose 用 |
 | 线上 404，本地直连端口正常 | 路径漏了 `/api/v1` 前缀，被 nginx 交给 web | 前缀在 `app/api/v1/__init__.py` 统一加 |
 | `alembic check` 报漂移，但代码没改 | 表达式索引（如 `desc("created_at")`）反射不回来 | 用普通 btree，Postgres 反向扫描同样快 |
 | 中文注释导致 alembic 崩 | `alembic.ini` 被按系统 locale 解码 | `alembic.ini` 只写 ASCII |

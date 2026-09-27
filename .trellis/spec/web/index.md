@@ -127,3 +127,4 @@ service 只返回 `code`，中文文案在 `lib/error-messages.ts`。**不要把
 | effect 里同步 `setState` 报错 | React Compiler 的新规则 | 从 props/state 派生，别在 effect 里同步写状态（见 `lib/use-api.ts` 的做法） |
 | `next build` 报 `useSearchParams() should be wrapped in a suspense boundary` | 客户端组件直接用了 `useSearchParams` | 把用到它的部分拆成子组件，外层包 `<Suspense>`（见 `(auth)/login/page.tsx`） |
 | `next build` 报 `Failed to resolve package babel-plugin-react-compiler` | `next.config.ts` 开了 `reactCompiler` 但没装插件 | `npm i -D babel-plugin-react-compiler` |
+| web 读不到环境变量 | Next.js **只加载自己目录下的 `.env*`**，不读仓库根目录 | 变量放 `web/.env.local`（实测 `loadEnvConfig` 不会向上找） |
