@@ -37,8 +37,10 @@ services:
     restart: unless-stopped
     env_file: ../.env
     environment:
-      # 容器里连的是服务名，不是宿主机的 127.0.0.1。
-      DATABASE_URL: postgresql://${POSTGRES_USER:-summer}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-summer_checkin}
+      # 应用配置类 env_prefix=SUMMER_（service/app/core/config.py），
+      # 所以这里必须用带前缀的名字，裸 DATABASE_URL 会被 Settings 忽略。
+      SUMMER_DATABASE_URL: postgresql://${POSTGRES_USER:-summer}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-summer_checkin}
+      SUMMER_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须设置}
       SERVICE_PORT: ${SERVICE_PORT:-8000}
       # 迁移由部署脚本显式执行，容器启动不隐式跑。
       SUMMER_AUTO_MIGRATE: "false"
