@@ -35,18 +35,20 @@ service/
 
 ## Quality Check
 
+先用 `service/` 下的 venv（普通 venv + pip，依赖见 `requirements.txt` / `requirements-dev.txt`）：
+
 ```
 cd service
-uv run ruff check .            # 必须 All checks passed
-uv run ruff format --check .   # 必须 already formatted
-uv run pytest                  # 必须全绿（不需要数据库）
+.venv/bin/ruff check .            # 必须 All checks passed（Windows: .venv\Scripts\ruff）
+.venv/bin/ruff format --check .   # 必须 already formatted
+.venv/bin/pytest                  # 必须全绿（不需要数据库）
 ```
 
 离线渲染迁移（不需要数据库，CI 也跑这条）：
 
 ```
 SUMMER_DATABASE_URL="postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test" \
-  uv run alembic upgrade head --sql > /tmp/schema.sql
+  .venv/bin/alembic upgrade head --sql > /tmp/schema.sql
 grep -c "CREATE TABLE" /tmp/schema.sql   # 32（31 张业务表 + alembic_version）
 grep -c "USING hnsw" /tmp/schema.sql     # 2
 grep -c "CREATE EXTENSION" /tmp/schema.sql  # 1
@@ -121,3 +123,5 @@ async def list_checkins(user: Annotated[CurrentUser, Depends(get_current_user)])
 | `alembic check` 报漂移，但代码没改 | 表达式索引（如 `desc("created_at")`）反射不回来 | 用普通 btree，Postgres 反向扫描同样快 |
 | 中文注释导致 alembic 崩 | `alembic.ini` 被按系统 locale 解码 | `alembic.ini` 只写 ASCII |
 | 越权读到别人的数据 | `user_id` 取自请求参数 | 只从 `get_current_user` 取 |
+| 服务器构建报 `No matching distribution found for X==…` | 钉的版本比国内镜像新（镜像同步慢几天） | `pip index versions <包> -i <镜像>` 先确认，再改 `requirements*.txt` 的版本号 |
+| 本地 `pytest` 报 `ModuleNotFoundError: app` | 项目不再以包形式装进 venv，靠 `pyproject.toml` 的 `pythonpath = ["."]` | 在 `service/` 目录下跑；别删这条配置 |

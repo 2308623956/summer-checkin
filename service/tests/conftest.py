@@ -48,7 +48,7 @@ def assert_is_test_database(url: str) -> None:
 
 
 # 需要真实数据库的测试用这个跳过：R000 阶段不连库，它们应当被跳过而不是失败。
-# 用法：SUMMER_TEST_DATABASE=1 uv run pytest（并先在 .env 填好 SUMMER_DATABASE_URL）。
+# 用法：SUMMER_TEST_DATABASE=1 pytest（并先在 .env 填好 SUMMER_DATABASE_URL）。
 requires_database = pytest.mark.skipif(
     os.environ.get("SUMMER_TEST_DATABASE") != "1",
     reason="需要真实测试库：设 SUMMER_TEST_DATABASE=1",

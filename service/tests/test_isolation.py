@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.security import decode_token
-from tests.helpers import TEST_USER_ID, auth_header, key_pair
+from tests.helpers import TEST_JWT_SECRET, TEST_USER_ID, auth_header
 
 OTHER_USER_ID = "01930000-0000-7000-8000-000000000002"
 
@@ -27,10 +27,10 @@ APP_DIR = Path(__file__).resolve().parents[1] / "app"
 def test_two_users_get_distinct_identities(client: TestClient) -> None:
     """两个用户的 token 必须解析成两个不同的 id，否则隔离无从谈起。"""
     first = decode_token(
-        auth_header(TEST_USER_ID)["Authorization"].removeprefix("Bearer "), key_pair()[1]
+        auth_header(TEST_USER_ID)["Authorization"].removeprefix("Bearer "), TEST_JWT_SECRET
     )
     second = decode_token(
-        auth_header(OTHER_USER_ID)["Authorization"].removeprefix("Bearer "), key_pair()[1]
+        auth_header(OTHER_USER_ID)["Authorization"].removeprefix("Bearer "), TEST_JWT_SECRET
     )
     assert first["sub"] == TEST_USER_ID
     assert second["sub"] == OTHER_USER_ID

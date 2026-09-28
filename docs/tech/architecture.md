@@ -34,7 +34,7 @@ graph LR
 
 | 技术 | 版本 | 用途 |
 |---|---|---|
-| Python | 3.12 | 运行时（本地已装 `uv` 管理的 CPython 3.12） |
+| Python | 3.12 | 运行时（依赖装在 `service/.venv`，普通 venv + pip，可指定镜像源） |
 | FastAPI | 0.11x | HTTP 层（契约、依赖注入、OpenAPI 自动生成） |
 | Uvicorn | 最新稳定版 | ASGI 服务器（容器内单 worker，多实例横向扩展） |
 | SQLAlchemy | 2.0（async）+ `asyncpg` | ORM，**schema 唯一所有者** |
@@ -45,7 +45,7 @@ graph LR
 | pytest + pytest-asyncio | — | 单测 |
 | ruff | — | lint + format |
 
-> 版本以各自 `package.json` / `pyproject.toml` 为准，开工时锁定具体版本号。
+> 版本以各自 `package.json` / `service/requirements*.txt` 为准，开工时锁定具体版本号。
 
 ### 1.3 基础设施
 

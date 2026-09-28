@@ -58,8 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 1. JWT 密钥存在性：缺失直接拒绝启动（不允许静默降级成无鉴权）
     if not settings.jwt_secret or len(settings.jwt_secret) < 32:
         raise RuntimeError(
-            "SUMMER_JWT_SECRET 未配置或长度不足（至少 32 字符）。"
-            "生成：openssl rand -base64 32"
+            "SUMMER_JWT_SECRET 未配置或长度不足（至少 32 字符）。生成：openssl rand -base64 32"
         )
     logger.info("startup: jwt secret ok")
 

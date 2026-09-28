@@ -19,7 +19,7 @@
 |---|---|---|
 | Node / npm | v22.16.0 / 10.9.2 | web 侧可用 |
 | pnpm | 11.8.0（已装，本任务不用） | 包管理器二选一，见 design D12 |
-| Python | 默认 3.10.13（Miniconda）；`uv` 0.11.6；**3.12 未安装** | service 用 uv 安装 3.12 |
+| Python | 默认 3.10.13（Miniconda）；另有 CPython 3.12.13（独立解释器，原由 uv 装，仍在） | service 用 3.12 建**普通 venv + pip**（uv / `uv.lock` 已弃用，pip 才能指定镜像源） |
 | Docker | **不存在**（`docker` 命令未识别），WSL Ubuntu-20.04 处于 Stopped | compose 与 nginx 验收降级，见 §10 第 15 行 |
 | 本地 PostgreSQL | 无 psql，5432/5433 均未监听 | **R000 不需要数据库连接**：迁移在本机用离线 DDL 渲染验证，真库校验在服务器上做 |
 | git | 已有仓库、5 个提交、**无 remote**、无 `.github/` | CI 文件先写好，见 §10 第 16 行 |
@@ -156,10 +156,10 @@
 |---|---|---|
 | 1 | `git log --oneline` | 新增提交承载工程基线（仓库已有历史，不重新 `git init`） |
 | 2 | `cd web; npm run check` | typecheck + lint + test 全绿 |
-| 3 | `cd service; uv run ruff check .; uv run ruff format --check .` | 全绿 |
-| 4 | `cd service; uv run pytest` | 全绿（含跨用户隔离守卫、无 `user_id` 过滤的查询守卫、模型池降级 + 记账的假 client 单测） |
-| 5 | `uv run python -c "..."` 统计 `Base.metadata.tables` | 恰好 **31** 张业务表 |
-| 6 | `uv run alembic upgrade head --sql`（离线渲染，不连库） | 生成的 DDL 含 `CREATE EXTENSION` + 31 张 `CREATE TABLE` + 2 条 `USING hnsw` |
+| 3 | `cd service; .venv/bin/ruff check .; .venv/bin/ruff format --check .` | 全绿 |
+| 4 | `cd service; .venv/bin/pytest` | 全绿（含跨用户隔离守卫、无 `user_id` 过滤的查询守卫、模型池降级 + 记账的假 client 单测） |
+| 5 | `.venv/bin/python -c "..."` 统计 `Base.metadata.tables` | 恰好 **31** 张业务表 |
+| 6 | `.venv/bin/alembic upgrade head --sql`（离线渲染，不连库） | 生成的 DDL 含 `CREATE EXTENSION` + 31 张 `CREATE TABLE` + 2 条 `USING hnsw` |
 | 7 | 迁移链自检单测（`downgrade` 函数存在且与 `upgrade` 对称） | 通过 |
 | 8 | **待你填好 `SUMMER_DATABASE_URL` 后执行**：`alembic upgrade head` → `alembic check` → `alembic current --check-heads` → `downgrade base` → `upgrade head` | 真库建出 31 张表、无漂移、在 head、可逆 |
 | 9 | `curl /api/v1/healthz` | `{"data":{"status":"ok","db":"ok",...}}` |

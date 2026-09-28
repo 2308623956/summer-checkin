@@ -39,20 +39,22 @@ jobs:
         working-directory: service
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
         with:
-          version: "0.11.6"
-      - run: uv sync --frozen
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pytest
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: service/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest
       # 迁移的正确性用离线渲染验证（不需要数据库）：
       # 断言恰好 31 张业务表 + alembic_version、2 条 HNSW 索引、1 条 pgvector 扩展。
       - name: 渲染迁移 DDL 并校验对象数量
         run: |
           set -euo pipefail
           export SUMMER_DATABASE_URL="postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test"
-          uv run alembic upgrade head --sql > /tmp/schema.sql
+          alembic upgrade head --sql > /tmp/schema.sql
           tables=$(grep -c "CREATE TABLE" /tmp/schema.sql)
           hnsw=$(grep -c "USING hnsw" /tmp/schema.sql)
           ext=$(grep -c "CREATE EXTENSION" /tmp/schema.sql)
@@ -82,17 +84,19 @@ jobs:
         working-directory: service
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
         with:
-          version: "0.11.6"
-      - run: uv sync --frozen
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: service/requirements*.txt
+      - run: pip install -r requirements-dev.txt
       - name: 建扩展并跑迁移
         env:
           PGPASSWORD: ci
           SUMMER_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test
         run: |
           set -euo pipefail
-          uv run python -c "
+          python -c "
           import asyncio, asyncpg
           async def main():
               conn = await asyncpg.connect('postgresql://ci:ci@localhost:5432/summer_checkin_test')
@@ -100,13 +104,13 @@ jobs:
               await conn.close()
           asyncio.run(main())
           "
-          uv run alembic upgrade head
-          uv run alembic check
-          uv run alembic current --check-heads
+          alembic upgrade head
+          alembic check
+          alembic current --check-heads
           # 可逆性：能从零重建（库名带 _test，护栏放行）。
-          uv run alembic downgrade base
-          uv run alembic upgrade head
-          uv run pytest -q
+          alembic downgrade base
+          alembic upgrade head
+          pytest -q
 
   docker-build:
     name: 镜像构建
@@ -114,6 +118,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: 构建 service 镜像
-        run: docker build -f infra/service.Dockerfile -t summer-service:ci .
+        # runner 在境外，走默认的公网源（内网源只在阿里云 ECS 上可用）
+        run: docker build -f infra/service.Dockerfile --build-arg PIP_INDEX_URL=https://pypi.org/simple/ -t summer-service:ci .
       - name: 构建 web 镜像
         run: docker build -f infra/web.Dockerfile -t summer-web:ci .

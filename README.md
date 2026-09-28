@@ -57,7 +57,7 @@
 
 ## 本地运行
 
-需要 Node 22、[uv](https://docs.astral.sh/uv/) 与 Docker。
+需要 Node 22、Python 3.12 与 Docker。
 
 ```bash
 # 1. 起数据库
@@ -68,11 +68,13 @@ docker compose -f infra/docker-compose.dev.yml up -d
 cp .env.example service/.env        # SUMMER_* 那些
 cp .env.example web/.env.local      # DATABASE_URL / BETTER_AUTH_* / SUMMER_JWT_PRIVATE_KEY
 
-# 3. service
+# 3. service（普通 venv + pip，`-i` 指定镜像源）
 cd service
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload    # :8000
+python -m venv .venv                            # Windows: py -3.12 -m venv .venv
+source .venv/bin/activate                       # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt -i https://mirrors.aliyun.com/pypi/simple/
+alembic upgrade head
+uvicorn app.main:app --reload                   # :8000
 
 # 4. web（另开终端）
 cd web
@@ -83,8 +85,10 @@ npm run dev                             # :3000
 ## 测试
 
 ```bash
-cd service && uv run ruff check . && uv run pytest    # 99 passed
-cd web && npm run check                               # typecheck + lint + vitest
+cd service
+source .venv/bin/activate                       # Windows: .venv\Scripts\activate
+ruff check . && ruff format --check . && pytest    # 93 passed
+cd ../web && npm run check                         # typecheck + lint + vitest
 ```
 
 ## 文档

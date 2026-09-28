@@ -1,28 +1,12 @@
+# Python 依赖不在这里：装什么看 requirements.txt / requirements-dev.txt
+# （普通 venv + pip，`-i` 可直接指定镜像源）。
+# 本文件只留项目元信息与 ruff / pytest 的工具配置。
 [project]
 name = "summer-checkin-service"
 version = "0.1.0"
 description = "Summer Checkin 领域服务（FastAPI）：业务数据与 agent 的唯一所有者"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = [
-    "alembic>=1.16",
-    "asyncpg>=0.30",
-    "fastapi>=0.115",
-    "pgvector>=0.4",
-    "pydantic-settings>=2.7",
-    "pyjwt[crypto]>=2.10",
-    "sqlalchemy[asyncio]>=2.0.36",
-    "structlog>=24.4",
-    "uvicorn[standard]>=0.34",
-]
-
-[dependency-groups]
-dev = [
-    "httpx>=0.28",
-    "pytest>=8.3",
-    "pytest-asyncio>=0.25",
-    "ruff>=0.9",
-]
 
 [tool.ruff]
 line-length = 100
@@ -36,10 +20,6 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["app"]
+# 项目不再作为包装进 venv（pip 只装依赖），所以要让 pytest 把 service/ 自己
+# 加进 sys.path，否则 `import app.*` 找不到——uvicorn 与 alembic 各自有等价的机制。
+pythonpath = ["."]

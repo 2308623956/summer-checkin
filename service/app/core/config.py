@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: 仓库根。`.env` / `.env.local` 放这里，**两个服务读同一份**。
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     @property
     def async_database_url(self) -> str:
         """转换成 SQLAlchemy asyncpg 驱动格式。
-        
+
         .env 里只维护标准格式 `postgresql://...`（与 web 的 Kysely 共用），
         service 用这个属性拿到 `postgresql+asyncpg://...` 格式。
         """

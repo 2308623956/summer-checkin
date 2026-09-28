@@ -2,7 +2,7 @@
 #
 # 没有这个文件时，`docker build` 会把仓库根下所有东西打包发给 daemon：
 # web/node_modules 约 556MB、service/.venv 约 87MB、web/.next 约 38MB。
-# 这些都不是构建输入（Dockerfile 里有各自的 npm ci / uv sync），白传一遍很慢。
+# 这些都不是构建输入（Dockerfile 里有各自的 npm ci / pip install），白传一遍很慢。
 
 # --- 依赖与构建产物（镜像内会重新装）---
 **/node_modules

@@ -186,7 +186,7 @@ LIMIT $3;                      -- topK 默认 5
 |---|---|---|---|
 | `nginx` | `nginx:alpine` | `80` / `443`（**唯一暴露**） | `/` 与 `/api/auth/*` → web；`/api/v1/*` → service；带 `X-Request-Id` 透传 |
 | `web` | `infra/web.Dockerfile`（多阶段，`node:22-alpine`，standalone 输出） | 内部 3000 | 非 root；运行时只带 standalone + static + public |
-| `service` | `infra/service.Dockerfile`（`python:3.12-slim` + `uv sync --frozen`） | 内部 8000 | 非 root；启动 `uvicorn --workers 1` |
+| `service` | `infra/service.Dockerfile`（`python:3.12-slim` + venv + `pip install -r requirements.txt`） | 内部 8000 | 非 root；启动 `uvicorn --workers 1` |
 | `db` | `pgvector/pgvector:pg16` | 内部 5432 | 卷 `db_data`；`pg_isready` 健康检查 |
 
 - **`service` 必须单 worker**：APScheduler 跑在进程内，多 worker 会让巡检重复触发。要扩并发就把调度拆成独立 `scheduler` 容器并用 advisory lock 防重——**这是升级路径，不是首版要做的事**。
@@ -194,6 +194,7 @@ LIMIT $3;                      -- topK 默认 5
 - **迁移不隐式执行**：发版时单独跑 `docker compose run --rm service alembic upgrade head`（参考工程的 `docker-entrypoint.sh` 也没有跑迁移，这条沿用）。R000 把它固化成 `infra/deploy.sh`。
 - 卷：`db_data`（数据库）、`service_tmp`（资料解析临时目录，`tmpfs` 亦可）；`docker compose down` **不带 `-v`**，卷不随容器删除。
 - PDF/Word 解析的 Python 依赖在 **service 镜像**里（`pypdf` / `python-docx`），web 镜像不再装 python（参考实现把 PyPDF2 装进了 web 镜像，重写后这一步挪走）。
+- **service 镜像的 pip 源可覆盖**：`infra/service.Dockerfile` 的 `PIP_INDEX_URL` 构建参数默认阿里云公网镜像，在 `.env` 里设同名变量（`infra/docker-compose.yml` 把它作为 build arg 传入）即可换成阿里云 ECS 内网源 `http://mirrors.cloud.aliyuncs.com/pypi/simple/`；CI 的 `docker-build` 显式传 `https://pypi.org/simple/`。
 - **`db` 容器挂 `infra/db/init-databases.sh`**：首次启动（数据卷为空）时建出 `summer_checkin` 与 `summer_checkin_test` 两个库并启用 pgvector。脚本幂等，重复执行无副作用。
 
 ### 6.1.1 迁移策略（dev 与生产的差别）
@@ -217,7 +218,7 @@ LIMIT $3;                      -- topK 默认 5
 | 工作流 | 触发 | 步骤 | 门禁 |
 |---|---|---|---|
 | `ci.yml` → `web-check` | push / PR | `npm ci` → `typecheck` → `lint` → `vitest` | 全绿；另加"web 不含 prisma 引用"的 grep 守卫 |
-| `ci.yml` → `service-check` | push / PR | `uv sync` → `ruff check` → `ruff format --check` → `pytest` → **离线渲染迁移**并断言对象数量 | 全绿；含跨用户隔离与"无 `user_id` 过滤的查询"守卫单测 |
+| `ci.yml` → `service-check` | push / PR | `pip install -r requirements-dev.txt` → `ruff check` → `ruff format --check` → `pytest` → **离线渲染迁移**并断言对象数量 | 全绿；含跨用户隔离与"无 `user_id` 过滤的查询"守卫单测 |
 | `ci.yml` → `migration-drift` | push / PR | postgres(pgvector) service container → `alembic upgrade head` → `alembic check` → `downgrade base` → `upgrade head` → `pytest` | 无漂移且迁移可逆 |
 | `ci.yml` → `docker-build` | push / PR | 构建 web 与 service 镜像（本期只构建不推送） | 构建成功即通过 |
 | `eval-gate.yml` | `paths: service/app/agent/prompts.py, service/app/llm/**, service/app/rag/**` + 手动 | 起 db，跑 `python -m app.eval --suite daily --baseline <上次>` | 五项指标超阈值即 fail（PRD 3.9） |
@@ -227,7 +228,7 @@ LIMIT $3;                      -- topK 默认 5
 把"不需要库也能守住的"放进 `service-check`，CI 反馈才快——离线渲染已能发现
 "表数量变了""HNSW 索引被删了"这类最常见的迁移事故。
 
-- 缓存：`npm`（`cache-dependency-path: web/package-lock.json`）、`uv cache`。
+- 缓存：`npm`（`cache-dependency-path: web/package-lock.json`）、`pip`（`cache-dependency-path: service/requirements*.txt`）。
 - 不在 CI 里连生产库；`eval-gate` 用**离线 fixture + 记录下来的模型输出**，只有手动触发时才真调模型（省额度、防噪声）。
 
 ## 8. 灰度与回滚

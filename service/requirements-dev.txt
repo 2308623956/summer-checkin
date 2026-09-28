@@ -1,0 +1,11 @@
+# 开发 / CI 依赖：包含 requirements.txt 的全部运行时依赖。
+#
+#   .venv/bin/pip install -r requirements-dev.txt -i https://mirrors.aliyun.com/pypi/simple/
+#
+# 版本号同样取镜像源上有的最新版本（见 requirements.txt 的说明）。
+-r requirements.txt
+
+httpx==0.28.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+ruff==0.16.8

@@ -1,0 +1,19 @@
+# service 运行时依赖（Python 3.12）——**Python 依赖的唯一声明处**。
+#
+#   python -m venv .venv
+#   .venv/bin/pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+#
+# 普通 venv + pip，装的时候可以直接指定镜像源（服务器上尤其需要）。
+# 版本号是**镜像源上实际有的最新版本**，不是 pypi.org 上的最新版：国内镜像比 pypi 慢
+# 几天（迁移时 pypi 上已是 sqlalchemy 2.1.1 / uvicorn 0.54.0 / pyjwt 2.15.0 / ruff 0.16.9，
+# 阿里云镜像还没有）。钉死到镜像有的版本，服务器构建才不会因为"找不到这个版本"而失败。
+# 升级：先 `pip index versions <包>` 确认镜像上有，再 `pip install -U <包>` 并把版本号写回本文件。
+alembic==1.20.0
+asyncpg==0.31.0
+fastapi==0.141.1
+pgvector==0.5.0
+pydantic-settings==2.15.0
+pyjwt[crypto]==2.14.0
+sqlalchemy[asyncio]==2.0.54
+structlog==26.1.0
+uvicorn[standard]==0.53.0

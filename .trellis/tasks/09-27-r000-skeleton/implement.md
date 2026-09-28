@@ -23,7 +23,7 @@
 
 ## S2a 数据库基线（本段不连库）
 
-- [ ] `service/pyproject.toml`：Python 3.12（uv 安装）、SQLAlchemy 2.0 / Alembic / pgvector / pydantic-settings / pytest / ruff（FastAPI 等 Web 依赖在 S2b 一并加）
+- [ ] `service/requirements.txt`（运行时依赖）+ `requirements-dev.txt`（加 ruff / pytest / httpx）：普通 venv + pip 安装，版本钉死到**镜像源上实际有的最新版**（不是 pypi.org 最新版，见 design D12）；`pyproject.toml` 只留 ruff / pytest 配置
 - [ ] `app/db/base.py`：`DeclarativeBase` + 命名约定（`naming_convention`，让约束有名字）
 - [ ] `app/models/`：31 张表按域分文件——`account.py`(4)、`study.py`(6)、`knowledge.py`(4)、`agent.py`(9)、`conversation.py`(3)、`usage_eval.py`(4)、外加 `user` 已在 account（合计 31）
 - [ ] pgvector：`Vector(1024)`（`documentchunk.embedding` 非空、`usermemory.embedding` 可空）；HNSW 索引在模型侧声明（`postgresql_using="hnsw"`、`postgresql_ops={"embedding": "vector_cosine_ops"}`）
@@ -33,10 +33,10 @@
 - [ ] `infra/db/init-databases.sh`：建 `summer_checkin` + `summer_checkin_test` + 两个库的 `vector` 扩展（0.1）
 - 校验（`prd.md` §10）：
   ```
-  uv run ruff check . && uv run ruff format --check .        # §10-3
-  uv run pytest                                              # §10-4、§10-7
-  uv run alembic upgrade head --sql | grep -c "CREATE TABLE"  # §10-6 期望 31
-  uv run alembic upgrade head --sql | grep -c "USING hnsw"    # §10-6 期望 2
+  .venv/bin/ruff check . && .venv/bin/ruff format --check .        # §10-3
+  .venv/bin/pytest                                                # §10-4、§10-7
+  .venv/bin/alembic upgrade head --sql | grep -c "CREATE TABLE"    # §10-6 期望 31
+  .venv/bin/alembic upgrade head --sql | grep -c "USING hnsw"      # §10-6 期望 2
   ```
 - **评审卡点 1（基线）**：31 张表建出、离线 DDL 完整、测试全绿。
 - **真库验收（等你填好 `.env` 后执行）**：`alembic upgrade head` → `alembic check` → `current --check-heads` → `downgrade base` → `upgrade head`（`prd.md` §10 第 8 行）；届时实测 HNSW 是否被 `alembic check` 误报为漂移，误报则用 `include_object` 排除并注明原因。
@@ -51,7 +51,7 @@
 - [ ] `app/api/v1/system.py`：`/healthz`、`/meta`；`/cron/daily` 占位
 - [ ] 五条读接口空实现（`/checkins`、`/plans`、`/runs`、`/notifications`、`/stats/overview`）
 - [ ] `tests/`：统一信封、错误码映射、鉴权（无凭据 401 / 错误 secret 403）、`db: down` 分支、跨用户隔离守卫、无 `user_id` 过滤的查询守卫、测试库名护栏
-- 校验：`uv run pytest`；起服务后
+- 校验：`.venv/bin/pytest`；起服务后
   ```
   curl :8000/api/v1/healthz                                  # §10-9
   curl :8000/api/v1/meta                                     # §10-10
@@ -83,7 +83,7 @@
 
 ## S5 编排、容器与 CI
 
-- [ ] `infra/web.Dockerfile`（多阶段、`node:22-alpine`、standalone、非 root）、`infra/service.Dockerfile`（`python:3.12-slim` + `uv sync --frozen`、非 root、单 worker）
+- [ ] `infra/web.Dockerfile`（多阶段、`node:22-alpine`、standalone、非 root）、`infra/service.Dockerfile`（`python:3.12-slim` + venv + `pip install -r requirements.txt`、`PIP_INDEX_URL` 构建参数可换镜像源、非 root、单 worker）
 - [ ] `infra/docker-compose.yml`（web / service / db / nginx；db 卷；健康检查顺序；迁移不隐式跑）、`infra/docker-compose.dev.yml`（只起 db）
 - [ ] `infra/nginx/*.conf`：`/` 与 `/api/auth/*` → web，`/api/v1/*` → service，`X-Request-Id` 透传
 - [ ] 模型池最小切片：`app/llm/pool.py`（档位链、失败降级、限流冷却）+ `usage.py` 记账 + 假 client 单测

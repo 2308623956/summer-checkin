@@ -108,11 +108,14 @@
 - **被否**：建两个空壳页面。理由：空壳等于替 R004/R010 预写 UI，且没有接口可对接，只会制造"看起来做完了"的假象。
 - **代价**：PRD 3.0.1 的"17 个页面"要回改成 15；导航入口里指向 `/review`、`/agent/eval` 的链接在 R000 期间不显示。
 
-### D12 包管理：web 用 npm
+### D12 包管理：web 用 npm，service 用 venv + pip
 
-- **选择**：`web/` 用 npm + Node 22；service 用 uv + Python 3.12（由 uv 安装）。
-- **理由**：`web/` 不是 workspace，搬过来的 `package-lock.json` 可直接用；PRD 3.11 的验收命令就是 `npm run check`。
-- **代价**：回改 `integrations.md` §7 的三处 `pnpm`。
+- **选择**：`web/` 用 npm + Node 22；service 用 Python 3.12 的**普通 venv + pip**，依赖写在 `requirements.txt` / `requirements-dev.txt`。
+- **理由**：`web/` 不是 workspace，搬过来的 `package-lock.json` 可直接用；PRD 3.11 的验收命令就是 `npm run check`。service 侧 pip 装依赖时可以直接 `-i <镜像源>`（镜像内是 `--build-arg PIP_INDEX_URL`）。
+- **改选（服务器实测）**：原来选的是 uv + `uv.lock`。实测 `uv sync --frozen` 即使在 `UV_DEFAULT_INDEX` 指向镜像源时，仍然按 lock 里记录的 `https://pypi.org/simple` / `files.pythonhosted.org` 取包——**源在 lock 生成时就钉死了**，服务器上只能走公网。改成 venv + pip 后源在安装时决定。
+- **被否**：继续用 uv 但在服务器上改 `uv.lock` 里的源。理由：那是改生成物，每次重新 lock 都会被覆盖回去。
+- **代价**：没有 lock 文件，只钉住直接依赖的版本号（`==`）；传递依赖由 pip 在安装时解析。
+- **镜像滞后**：国内镜像比 pypi.org 慢几天（实测阿里云镜像上 sqlalchemy 只到 2.0.54、uvicorn 0.53.0、pyjwt 2.14.0、ruff 0.16.8）。所以 `requirements*.txt` 钉的是**镜像上有的版本**——钉 pypi 最新版会让服务器构建直接失败（`No matching distribution found`）。清华镜像当时有这些新版本，可以用 `-i` 换它。
 
 ### D13 单任务，不拆父/子
 

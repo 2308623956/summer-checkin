@@ -6,18 +6,24 @@ Summer Checkin 的领域服务：**业务数据与业务接口的唯一所有者
 ## 本地怎么跑
 
 ```bash
-uv sync                                    # 装依赖（Python 3.12 由 uv 管理）
+python -m venv .venv                       # Python 3.12；Windows: py -3.12 -m venv .venv
+source .venv/bin/activate                  # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt -i https://mirrors.aliyun.com/pypi/simple/
 cp ../.env.example .env                    # 填入 SUMMER_DATABASE_URL 等
-uv run alembic upgrade head                # 建表（31 张）
-uv run uvicorn app.main:app --reload       # 起服务
+alembic upgrade head                       # 建表（31 张）
+uvicorn app.main:app --reload              # 起服务
 ```
+
+依赖只声明在 `requirements.txt`（运行时）/ `requirements-dev.txt`（含 ruff、pytest），
+用普通 venv + pip 安装，所以 `-i` 可以直接指定镜像源；`pyproject.toml` 只留工具配置。
+容器里同样是 venv（`/app/.venv`），见 `infra/service.Dockerfile`。
 
 校验命令：
 
 ```bash
-uv run ruff check . && uv run ruff format --check .
-uv run pytest
-uv run alembic check                       # 模型与库无漂移
+ruff check . && ruff format --check .
+pytest                                     # 93 passed
+alembic check                              # 模型与库无漂移
 ```
 
 ## 目录

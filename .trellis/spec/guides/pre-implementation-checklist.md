@@ -235,16 +235,16 @@ Trellis 的 `trellis-before-dev` 要求：改动超过一个文件、跨层、�
 npm run check        # = typecheck + lint + test（vitest）
 npm run build        # 构建期问题只有它能抓到（用占位环境变量即可）
 
-# service 侧（service/ 目录下）
-uv run ruff check .
-uv run pytest        # 不需要数据库
+# service 侧（service/ 目录下，依赖装在 service/.venv：普通 venv + pip）
+.venv/bin/ruff check .        # Windows: .venv\Scripts\ruff
+.venv/bin/pytest              # 不需要数据库
 
 # 数据基线（service/ 目录下，离线，不需要连库）
 SUMMER_DATABASE_URL="postgresql+asyncpg://ci:ci@localhost:5432/summer_checkin_test" \
-  uv run alembic upgrade head --sql | grep -c "CREATE TABLE"   # 期望 32
+  .venv/bin/alembic upgrade head --sql | grep -c "CREATE TABLE"   # 期望 32
 
 # 真库（需要 SUMMER_DATABASE_URL 指向 _test 库）
-uv run alembic upgrade head && uv run alembic check
+.venv/bin/alembic upgrade head && .venv/bin/alembic check
 ```
 
 **验证 ≠ 确认**：跑过才算验证；"看了代码觉得应该没问题"只是确认。
